@@ -138,7 +138,23 @@ async function drain() {
 const server = new FastMCP({
   name: 'ZenTao Bugs MCP',
   version: '1.0.0',
-  instructions: 'Tools to search ZenTao products/bugs and resolve bugs. Emits progress logs. All operations are serialized to ensure single-flight.',
+  instructions: [
+    'Tools to search ZenTao products/bugs and resolve bugs. Emits progress logs. All operations are serialized to ensure single-flight.',
+    '',
+    '## Image Viewing Workflow',
+    'Bug details returned by getBugDetail / getMyBug contain two image-related fields:',
+    '  - `steps`: HTML content with image URLs already resolved to full URLs',
+    '  - `stepsImages`: an array of image URLs extracted from steps',
+    '',
+    'These images are hosted on a private ZenTao server and require authentication.',
+    'To view them, call `getFileImage` with each URL from `stepsImages`.',
+    'The tool returns base64-encoded image content that you can display directly.',
+    '',
+    'Example flow:',
+    '  1. Call getBugDetail(bugId) -> get bug.stepsImages = ["http://host/zentao/file-read-39735.png", ...]',
+    '  2. For each image URL, call getFileImage(url) to fetch and display the screenshot',
+    '  3. Use the screenshots to understand the bug reproduction steps visually',
+  ].join('\n'),
   // Optional health endpoint customizations
   health: { enabled: true, path: '/health', message: 'ok', status: 200 },
   ping: { enabled: true, intervalMs: 15000 },
@@ -233,46 +249,65 @@ server.addTool({
 
 server.addTool({
   name: 'getMyBugs',
-  description: '获取指派给我的BUG列表（默认只返回激活状态）。用于查看需要处理的BUG列表。必须指定产品ID以保持专注',
-  parameters: z.object({ 
-    productId: z.number().describe('指定产品ID（必需）'),
-    keyword: z.string().optional().describe('BUG标题关键词搜索'),
-    allStatuses: z.boolean().optional().default(false).describe('是否返回所有状态的BUG，默认false只返回激活状态'),
-    limit: z.number().optional().default(10).describe('返回数量限制，默认10条')
+  description: [
+    '獲取 BUG 列表，支援多種伺服器端篩選條件。必須指定產品 ID。',
+    'browseType 可選值：',
+    '  assigntome   - 指派給我（預設）',
+    '  all          - 所有 Bug',
+    '  unclosed     - 未關閉',
+    '  openedbyme   - 由我創建',
+    '  resolvedbyme - 由我解決',
+    '  toclosed     - 待關閉',
+    '  unresolved   - 未解決（不區分處理人）',
+    '  unconfirmed  - 未確認',
+    '  assigntonull - 未指派',
+    '  longlifebugs - 久未處理',
+    '  postponedbugs- 被延期',
+    '  overduebugs  - 過期 Bug',
+    '  needconfirm  - 需求變動',
+  ].join('\n'),
+  parameters: z.object({
+    productId: z.number().describe('指定產品 ID（必需）'),
+    browseType: z.enum([
+      'assigntome', 'all', 'unclosed', 'openedbyme', 'resolvedbyme',
+      'toclosed', 'unresolved', 'unconfirmed', 'assigntonull',
+      'longlifebugs', 'postponedbugs', 'overduebugs', 'needconfirm'
+    ]).optional().default('assigntome').describe('篩選類型，預設 assigntome（指派給我）'),
+    keyword: z.string().optional().describe('BUG 標題關鍵詞搜索（客戶端過濾）'),
+    limit: z.number().optional().default(20).describe('返回數量限制，預設 20 條')
   }),
   annotations: { title: 'Search Product Bugs', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          log.info('正在获取指派给我的BUG...');
-          
-          const bugs = await zentaoAPI.searchBugs(args.productId, {
+          log.info(`正在獲取 BUG 列表（${args.browseType}）...`);
+
+          const bugs = await zentaoAPI.browseBugs(args.productId, {
+            browseType: args.browseType,
             keyword: args.keyword,
-            allStatuses: args.allStatuses,
-            assignedToMe: true,
             limit: args.limit
           });
-          
-          resolve({ 
-            content: [{ 
-              type: 'text', 
-              text: JSON.stringify({ 
+
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
                 bugs,
                 count: bugs.length,
-                assignedToMe: true,
-                activeOnly: !args.allStatuses
-              }) 
-            }] 
+                browseType: args.browseType,
+                productId: args.productId
+              })
+            }]
           });
         } catch (err) {
-          resolve({ 
-            content: [{ 
-              type: 'text', 
-              text: JSON.stringify({ 
-                error: err instanceof UserError ? err.message : String(err?.message || err) 
-              }) 
-            }] 
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
           });
         }
       });
@@ -282,14 +317,14 @@ server.addTool({
 
 server.addTool({
   name: 'getBugDetail',
-  description: '返回 Bug 全字段 + 原始 HTML 步骤',
+  description: '返回 Bug 全字段 + 原始 HTML 步骤 + 歷史記錄（操作日誌、備註、流轉過程）',
   parameters: z.object({ bugId: z.number() }),
   annotations: { title: 'Get Bug Detail', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必须为数字');
+          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必須為數字');
           log.info('正在获取 Bug 详情...');
           
           const bug = await zentaoAPI.getBugDetail(args.bugId);
@@ -311,26 +346,60 @@ server.addTool({
 
 server.addTool({
   name: 'markBugResolved',
-  description: '把 Bug 置为已解决（resolution=fixed）',
-  parameters: z.object({ bugId: z.number(), comment: z.string().optional() }),
+  description: [
+    '解決 Bug：支援多種解決方案、備註、解決版本、指派人等完整欄位。',
+    'resolution 可選值：',
+    '  fixedcodeerror（代碼欠缺或錯誤，預設）、fixeddesigndefect（文檔設計缺失）、',
+    '  fixeduierror（UI 樣式問題）、fixedwrongdata（早期錯誤數據）、',
+    '  fixedsettingerror（設置錯誤或配置問題）、fixedcognitiveerror（認知錯誤）、',
+    '  fixednew（新需求）、fixedbetteruse（優化）、',
+    '  bydesign（設計如此）、duplicate（重複 Bug）、external（外部原因）、',
+    '  notrepro（無法重現）、postponed（延期處理）、willnotfix（不予解決）',
+  ].join('\n'),
+  parameters: z.object({
+    bugId: z.number().describe('Bug ID（必需）'),
+    resolution: z.enum([
+      'fixedcodeerror', 'fixeddesigndefect', 'fixeduierror', 'fixedwrongdata',
+      'fixedsettingerror', 'fixedcognitiveerror', 'fixednew', 'fixedbetteruse',
+      'bydesign', 'duplicate', 'external', 'notrepro', 'postponed', 'willnotfix',
+    ]).optional().default('fixedcodeerror').describe('解決方案，預設 fixedcodeerror（代碼欠缺或錯誤）'),
+    comment: z.string().optional().describe('備註說明，描述修復內容或原因'),
+    resolvedBuild: z.string().optional().default('trunk').describe('解決版本，預設 trunk（主幹）'),
+    resolvedDate: z.string().optional().describe('解決日期，格式 YYYY-MM-DD HH:mm:ss，不填則使用當前時間'),
+    assignedTo: z.string().optional().describe('解決後指派給誰驗證（用戶帳號，如 john），不填則由禪道自動指派給創建人'),
+    duplicateBug: z.number().optional().describe('重複的 Bug ID，僅當 resolution=duplicate 時需要填寫'),
+  }),
   annotations: { title: 'Resolve Bug', readOnlyHint: false, idempotentHint: false, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必须为数字');
-          log.info('正在将 Bug 置为已解决...');
-          
-          const result = await zentaoAPI.markBugResolved(args.bugId, args.comment);
-          resolve({ content: [{ type: 'text', text: JSON.stringify({ bug: result }) }] });
+          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必須為數字');
+          if (args.resolution === 'duplicate' && !args.duplicateBug) {
+            throw new UserError('resolution 為 duplicate 時，必須提供 duplicateBug（重複的 Bug ID）');
+          }
+          log.info(`正在解決 Bug #${args.bugId}（${args.resolution}）...`);
+
+          const result = await zentaoAPI.markBugResolved(args.bugId, {
+            resolution: args.resolution,
+            comment: args.comment,
+            resolvedBuild: args.resolvedBuild,
+            resolvedDate: args.resolvedDate,
+            assignedTo: args.assignedTo,
+            duplicateBug: args.duplicateBug,
+          });
+          const summary = result.success
+            ? { success: true, message: `Bug #${args.bugId} 已成功標記為已解決（${args.resolution}）` }
+            : { bug: result };
+          resolve({ content: [{ type: 'text', text: JSON.stringify(summary) }] });
         } catch (err) {
-          resolve({ 
-            content: [{ 
-              type: 'text', 
-              text: JSON.stringify({ 
-                error: err instanceof UserError ? err.message : String(err?.message || err) 
-              }) 
-            }] 
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
           });
         }
       });
@@ -393,44 +462,85 @@ server.addTool({
 
 server.addTool({
   name: 'getBugStats',
-  description: '获取BUG统计信息：指派给我的BUG总数、激活状态数量等。用于了解工作量和进度。必须指定产品ID以保持专注',
-  parameters: z.object({ 
-    productId: z.number().describe('指定产品ID（必需）'),
-    activeOnly: z.boolean().optional().default(true).describe('是否只统计激活状态BUG，默认true')
+  description: '獲取 BUG 統計資訊：總數及前幾筆預覽。支援 browseType 篩選',
+  parameters: z.object({
+    productId: z.number().describe('指定產品 ID（必需）'),
+    browseType: z.enum([
+      'assigntome', 'all', 'unclosed', 'openedbyme', 'resolvedbyme',
+      'toclosed', 'unresolved', 'unconfirmed', 'assigntonull',
+      'longlifebugs', 'postponedbugs', 'overduebugs', 'needconfirm'
+    ]).optional().default('assigntome').describe('篩選類型，預設 assigntome')
   }),
   annotations: { title: 'Get Bug Statistics', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          log.info('正在获取BUG统计信息...');
-          
-          const result = await zentaoAPI.searchBugsWithTotal(args.productId, {
-            activeOnly: args.activeOnly,
-            assignedToMe: true
+          log.info(`正在獲取 BUG 統計（${args.browseType}）...`);
+
+          const result = await zentaoAPI.browseBugsWithTotal(args.productId, {
+            browseType: args.browseType
           });
-          
-          resolve({ 
-            content: [{ 
-              type: 'text', 
-              text: JSON.stringify({ 
+
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
                 total: result.total,
                 hasMore: result.hasMore,
-                preview: result.bugs.slice(0, 5), // 只显示前5个作为预览
-                assignedToMe: true,
-                activeOnly: args.activeOnly,
+                preview: result.bugs.slice(0, 5),
+                browseType: args.browseType,
                 productId: args.productId
-              }) 
-            }] 
+              })
+            }]
           });
         } catch (err) {
-          resolve({ 
-            content: [{ 
-              type: 'text', 
-              text: JSON.stringify({ 
-                error: err instanceof UserError ? err.message : String(err?.message || err) 
-              }) 
-            }] 
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
+          });
+        }
+      });
+    });
+  },
+});
+
+server.addTool({
+  name: 'getFileImage',
+  description: '透過禪道授權 session 抓取圖片檔案，回傳 base64 圖片。用於查看 Bug 步驟中的截圖附件。支援完整 URL 或 file-read-{id}.{ext} 路徑',
+  parameters: z.object({
+    url: z.string().describe('圖片 URL，例如 http://your-zentao.com/zentao/file-read-39735.png 或 file-read-39735.png')
+  }),
+  annotations: { title: 'Get File Image', readOnlyHint: true, openWorldHint: true },
+  execute: async (args, { log }) => {
+    return await new Promise((resolve) => {
+      enqueue(async () => {
+        try {
+          log.info(`正在抓取圖片: ${args.url}`);
+          const { buffer, mimeType } = await zentaoAPI.fetchFile(args.url);
+
+          // 僅允許圖片類型
+          if (!mimeType.startsWith('image/')) {
+            resolve({
+              content: [{ type: 'text', text: JSON.stringify({ error: `非圖片類型: ${mimeType}` }) }]
+            });
+            return;
+          }
+
+          resolve({
+            content: [{
+              type: 'image',
+              data: buffer.toString('base64'),
+              mimeType
+            }]
+          });
+        } catch (err) {
+          resolve({
+            content: [{ type: 'text', text: JSON.stringify({ error: String(err?.message || err) }) }]
           });
         }
       });
