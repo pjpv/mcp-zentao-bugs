@@ -6,15 +6,35 @@
 
 ## 快速開始
 
-### 安裝
+### 方式一：npm 直接使用（推薦，無需 clone）
+
+```json
+// Claude Desktop / Cursor 配置文件
+{
+  "mcpServers": {
+    "zentao-bugs": {
+      "command": "npx",
+      "args": ["-y", "mcp-zentao-bugs-v12@latest"],
+      "env": {
+        "ZENTAO_BASE_URL": "https://your-zentao.com/zentao",
+        "ZENTAO_ACCOUNT": "your-username",
+        "ZENTAO_PASSWORD": "your-password",
+        "PORT": "3000"
+      }
+    }
+  }
+}
+```
+
+> **無需 .env 文件**：生產環境直接在客戶端配置中傳入環境變量即可。
+
+### 方式二：本地開發
 
 ```bash
-git clone https://github.com/<your-org>/mcp-zentao-bugs.git
+git clone https://github.com/pjpv/mcp-zentao-bugs.git
 cd mcp-zentao-bugs
 pnpm install
 ```
-
-### 配置與運行
 
 複製 `.env.example` 為 `.env` 並填入禪道連線資訊：
 
