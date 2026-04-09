@@ -576,28 +576,28 @@ try {
     console.log(`❤️  Health check: http://localhost:${PORT}/health`);
 
     console.log(`\n📋 MCP Client Configuration:`);
-  console.log(JSON.stringify({
-    mcpServers: {
-      "zentao-server": {
-        "url": `http://localhost:${PORT}/sse`
+    console.log(JSON.stringify({
+      mcpServers: {
+        "zentao-server": {
+          "url": `http://localhost:${PORT}/sse`
+        }
       }
-    }
-  }, null, 2));
-  
-  console.log(`\n📝 Environment Configuration Sample:`);
-  console.log(`# 禅道配置`);
-  console.log(`ZENTAO_BASE_URL=https://your-zentao.com`);
-  console.log(`ZENTAO_ACCOUNT=your-username`);
-  console.log(`ZENTAO_PASSWORD=your-password`);
-  console.log(`\n# 服务器端口`);
-  console.log(`PORT=3000`);
-  
-  console.log(`\n💡 Quick Start:`);
-  console.log(`1. Copy the above env config to .env file`);
-  console.log(`2. Update with your ZenTao credentials`);
-  console.log(`3. Add the MCP config to your client (Trae/Claude Code)`);
-  console.log(`4. Start using the ZenTao tools!`);
-  
+    }, null, 2));
+
+    console.log(`\n📝 Environment Configuration Sample:`);
+    console.log(`# 禪道配置`);
+    console.log(`ZENTAO_BASE_URL=https://your-zentao.com`);
+    console.log(`ZENTAO_ACCOUNT=your-username`);
+    console.log(`ZENTAO_PASSWORD=your-password`);
+    console.log(`\n# 服务器端口`);
+    console.log(`PORT=3000`);
+
+    console.log(`\n💡 Quick Start:`);
+    console.log(`1. Copy the above env config to .env file`);
+    console.log(`2. Update with your ZenTao credentials`);
+    console.log(`3. Add the MCP config to your client (Trae/Claude Code)`);
+    console.log(`4. Start using the ZenTao tools!`);
+  }
 } catch (err) {
   console.error('Fatal: login failed:', err?.message || err);
   process.exit(1);
