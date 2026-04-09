@@ -109,7 +109,7 @@ if (missingEnvs.length > 0) {
   console.error('  ZENTAO_PASSWORD="your-password" \\');
   console.error('  PORT="3000" \\');
   console.error('  mcp-zentao-bugs');
-  console.error('\n📚 更多信息请查看: https://github.com/evlon/mcp-zentao-bugs#readme');
+  console.error('\n📚 更多信息请查看: https://github.com/pjpv/mcp-zentao-bugs#readme');
   process.exit(1);
 }
 
