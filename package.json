@@ -1,11 +1,11 @@
 {
-  "name": "mcp-zentao-bugs",
-  "version": "1.0.5",
-  "description": "MCP server for ZenTao via FastMCP (HTTP stream + SSE)",
+  "name": "mcp-zentao-bugs-v12",
+  "version": "0.0.1",
+  "description": "MCP server for ZenTao v12.x via FastMCP (Session API + HTTP stream + SSE)",
   "type": "module",
   "main": "src/mcp-server.mjs",
   "bin": {
-    "mcp-zentao-bugs": "src/mcp-server.mjs"
+    "mcp-zentao-bugs-v12": "src/mcp-server.mjs"
   },
   "scripts": {
     "start": "node -r dotenv/config src/mcp-server.mjs",
@@ -35,12 +35,12 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/evlon/mcp-zentao-bugs.git"
+    "url": "git+https://github.com/pjpv/mcp-zentao-bugs.git"
   },
   "bugs": {
-    "url": "https://github.com/evlon/mcp-zentao-bugs/issues"
+    "url": "https://github.com/pjpv/mcp-zentao-bugs/issues"
   },
-  "homepage": "https://github.com/evlon/mcp-zentao-bugs#readme",
+  "homepage": "https://github.com/pjpv/mcp-zentao-bugs#readme",
   "files": [
     "src/",
     "api-docs/",
