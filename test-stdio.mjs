@@ -7,7 +7,9 @@ const env = {
   ZENTAO_BASE_URL: 'http://192.168.88.12/zentao/',
   ZENTAO_ACCOUNT: 'gapen',
   ZENTAO_PASSWORD: 'gapen',
-  ...process.env
+  PATH: process.env.PATH,
+  USERPROFILE: process.env.USERPROFILE,
+  // 不繼承其他環境變量，特別是 PORT
 };
 
 console.error('🧪 啟動 stdio 模式測試...');
