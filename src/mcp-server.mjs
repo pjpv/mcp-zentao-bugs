@@ -554,7 +554,8 @@ try {
 
   // 檢測是否在 stdio 環境（由 MCP 客戶端通過 stdio 啟動）
   // stdio 模式特徵：stdin 不是 TTY（被管道連接）
-  const isStdioMode = process.stdin.isTTY === false;
+  // isTTY 可能是 true、false 或 undefined
+  const isStdioMode = process.stdin.isTTY !== true;
 
   if (isStdioMode) {
     // stdio 模式：MCP 客戶端通過 stdin/stdout 通信
