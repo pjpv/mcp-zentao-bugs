@@ -1,11 +1,12 @@
 {
   "name": "mcp-zentao-bugs-v12",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "MCP server for ZenTao v12.x via FastMCP (Session API + HTTP stream + SSE)",
   "type": "module",
   "main": "src/mcp-server.mjs",
   "bin": {
-    "mcp-zentao-bugs-v12": "src/mcp-server.mjs"
+    "mcp-zentao-bugs-v12": "src/mcp-server.mjs",
+    "zentao-mcp": "src/stdio-server.mjs"
   },
   "scripts": {
     "start": "node -r dotenv/config src/mcp-server.mjs",
@@ -52,6 +53,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
     "dotenv": "^16.6.1",
     "fastmcp": "3.22.0",
     "zod": "^3.25.76"
