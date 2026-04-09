@@ -135,7 +135,7 @@ async function drain() {
 }
 
 // ---- Build FastMCP server ----
-const server = new FastMCP({
+const serverConfig = {
   name: 'ZenTao Bugs MCP',
   version: '1.0.0',
   instructions: [
@@ -155,11 +155,21 @@ const server = new FastMCP({
     '  2. For each image URL, call getFileImage(url) to fetch and display the screenshot',
     '  3. Use the screenshots to understand the bug reproduction steps visually',
   ].join('\n'),
-  // Optional health endpoint customizations
-  health: { enabled: true, path: '/health', message: 'ok', status: 200 },
-  ping: { enabled: true, intervalMs: 15000 },
   roots: { enabled: false },
-});
+};
+
+// 檢測是否在 stdio 環境（由 MCP 客戶端通過 stdio 啟動）
+// stdio 模式特徵：stdin 不是 TTY（被管道連接）
+// isTTY 可能是 true、false 或 undefined
+const isStdioMode = process.stdin.isTTY !== true;
+
+// stdio 模式不需要 HTTP 相關配置
+if (!isStdioMode) {
+  serverConfig.health = { enabled: true, path: '/health', message: 'ok', status: 200 };
+  serverConfig.ping = { enabled: true, intervalMs: 15000 };
+}
+
+const server = new FastMCP(serverConfig);
 
 // Tools
 server.addTool({
