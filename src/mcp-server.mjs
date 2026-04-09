@@ -553,7 +553,8 @@ try {
   await zentaoAPI.login();
 
   // 檢測是否在 stdio 環境（由 MCP 客戶端通過 stdio 啟動）
-  const isStdioMode = process.stdin.isTTY === false && !process.env.PORT;
+  // 如果明確設置了 PORT 環境變量，使用 HTTP 模式；否則默認使用 stdio
+  const isStdioMode = !process.env.PORT;
 
   if (isStdioMode) {
     // stdio 模式：MCP 客戶端通過 stdin/stdout 通信
