@@ -548,22 +548,34 @@ server.addTool({
   },
 });
 
-// ---- Bootstrap: login then start HTTP streaming (SSE included) ----
+// ---- Bootstrap: login then start server (auto-detect transport) ----
 try {
   await zentaoAPI.login();
-  console.log('Login success. Starting FastMCP httpStream...');
-  await server.start({
-    transportType: 'httpStream',
-    httpStream: { port: PORT },
-  });
-  
-  console.log(`\n🚀 ZenTao MCP Server started successfully!`);
-  console.log(`📡 Server running on: http://localhost:${PORT}`);
-  console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
-  console.log(`📡 SSE endpoint: http://localhost:${PORT}/sse`);
-  console.log(`❤️  Health check: http://localhost:${PORT}/health`);
-  
-  console.log(`\n📋 MCP Client Configuration:`);
+
+  // 檢測是否在 stdio 環境（由 MCP 客戶端通過 stdio 啟動）
+  const isStdioMode = process.stdin.isTTY === false && !process.env.PORT;
+
+  if (isStdioMode) {
+    // stdio 模式：MCP 客戶端通過 stdin/stdout 通信
+    console.error('Starting FastMCP in stdio mode...');
+    await server.start({
+      transportType: 'stdio',
+    });
+  } else {
+    // HTTP/SSE 模式：獨立服務器
+    console.log('Login success. Starting FastMCP httpStream...');
+    await server.start({
+      transportType: 'httpStream',
+      httpStream: { port: PORT },
+    });
+
+    console.log(`\n🚀 ZenTao MCP Server started successfully!`);
+    console.log(`📡 Server running on: http://localhost:${PORT}`);
+    console.log(`🔗 MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`📡 SSE endpoint: http://localhost:${PORT}/sse`);
+    console.log(`❤️  Health check: http://localhost:${PORT}/health`);
+
+    console.log(`\n📋 MCP Client Configuration:`);
   console.log(JSON.stringify({
     mcpServers: {
       "zentao-server": {
