@@ -44,7 +44,7 @@ export class ZenTaoAPI {
       throw new Error(`Login failed: ${loginJson.reason || loginText}`);
     }
 
-    console.log('Login success via session API');
+    console.error('Login success via session API');
     return this.sessionId;
   }
 
