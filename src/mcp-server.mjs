@@ -169,7 +169,16 @@ if (!isStdioMode) {
   serverConfig.ping = { enabled: true, intervalMs: 15000 };
 }
 
-const server = new FastMCP(serverConfig);
+const server = new FastMCP({
+  ...serverConfig,
+  // stdio 模式下 stdout 只能輸出 JSON-RPC，所有日誌必須走 stderr
+  logger: {
+    debug: (...args) => console.error('[DEBUG]', ...args),
+    error: (...args) => console.error('[ERROR]', ...args),
+    info: (...args) => console.error('[INFO]', ...args),
+    warn: (...args) => console.error('[WARN]', ...args),
+  },
+});
 
 // Tools
 server.addTool({
