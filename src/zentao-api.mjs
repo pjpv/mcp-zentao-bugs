@@ -135,32 +135,39 @@ export class ZenTaoAPI {
   }
 
   /**
-   * 發送 POST 請求並解析舊版 API 回應
+   * 發送 POST 請求並解析舊版 API 回應（含自動重登）
    */
   async postOldApi(path, body) {
-    const resp = await fetch(`${this.baseUrl}/${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': `${this.sessionName}=${this.sessionId}`
+    return this._requestWithRelogin(
+      path,
+      async () => {
+        const resp = await fetch(`${this.baseUrl}/${path}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cookie': `${this.sessionName}=${this.sessionId}`
+          },
+          body
+        });
+        const text = await resp.text();
+        return { resp, text };
       },
-      body
-    });
-    if (!resp.ok) {
-      const text = await resp.text().catch(() => '');
-      throw new Error(`POST /${path} failed: ${resp.status} ${text}`);
-    }
+      (fr) => this._parsePostResponse(path, fr.text)
+    );
+  }
 
-    // 禪道部分寫入操作（如 bug-resolve）成功後返回 HTML 重定向而非 JSON
-    const contentType = resp.headers.get('content-type') || '';
-    const text = await resp.text();
-
-    if (contentType.includes('text/html') || text.trimStart().startsWith('<html')) {
-      // 從重定向腳本中提取目標路徑，視為操作成功
+  /**
+   * 解析 POST 回應
+   * 成功的寫入操作（如 bug-resolve）回傳 HTML 重導腳本，含 parent.location=
+   * 注意：過期重導（user-login）已由 _requestWithRelogin 先行攔截，不會走到這裡
+   */
+  _parsePostResponse(path, text) {
+    if (text.trimStart().startsWith('<html')) {
       const redirectMatch = text.match(/parent\.location='([^']+)'/);
-      return { success: true, redirect: redirectMatch?.[1] || null };
+      if (redirectMatch) {
+        return { success: true, redirect: redirectMatch[1] };
+      }
     }
-
     let json;
     try { json = JSON.parse(text); } catch {
       throw new Error(`POST /${path} returned unexpected body: ${text.slice(0, 200)}`);

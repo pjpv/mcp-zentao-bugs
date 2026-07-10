@@ -174,3 +174,58 @@ describe('fetchOldApi with relogin', () => {
     }
   });
 });
+
+describe('postOldApi with relogin', () => {
+  it('bug-resolve 成功的 HTML 重導（parent.location）正確解析為 success', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => ({
+      ok: true,
+      status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+      text: async () => `<html><script>parent.location='/zentao/bug-view-123.html'</script></html>`
+    });
+
+    try {
+      const result = await api.postOldApi('bug-resolve-123.json', 'resolution=fixed');
+      assert.equal(result.success, true);
+      assert.equal(result.redirect, '/zentao/bug-view-123.html');
+      assert.equal(api.login.mock.callCount(), 0); // 不是過期，不重登
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('session 過期時自動重登後重發 POST', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn(async () => 'new-session');
+
+    const originalFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = async (url, opts) => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: true, status: 200,
+          headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+          text: async () => `<script>self.location='/user-login-x.json';</script>`
+        };
+      }
+      return {
+        ok: true, status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+        text: async () => `<html><script>parent.location='/zentao/bug-view-1.html'</script></html>`
+      };
+    };
+
+    try {
+      const result = await api.postOldApi('bug-resolve-1.json', 'resolution=fixed');
+      assert.equal(result.success, true);
+      assert.equal(api.login.mock.callCount(), 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
