@@ -59,6 +59,18 @@ export class ZenTaoAPI {
   }
 
   /**
+   * 偵測回應是否為 session 過期的重導頁面
+   * 禪道過期時回傳 HTTP 200 + text/html + 含 user-login 的 JS 重導腳本
+   * @param {Response} resp - fetch 回應物件
+   * @param {string} text - 已取出的 body 文字
+   * @returns {boolean}
+   */
+  isSessionExpired(resp, text) {
+    const ct = resp.headers.get('content-type') || '';
+    return ct.includes('text/html') && text.includes('user-login');
+  }
+
+  /**
    * 解析禪道 12.x 舊版 API 回傳格式
    * 舊版格式：{"status":"success","data":"<JSON字串>"}
    * data 欄位是被轉義的 JSON 字串，需要二次解析
