@@ -605,7 +605,7 @@ export class ZenTaoAPI {
   }
 
   /**
-   * 抓取禪道檔案（圖片等），回傳 Buffer 及 MIME 類型
+   * 抓取禪道檔案（圖片等），回傳 Buffer 及 MIME 類型（含自動重登）
    * @param {string} fileUrl - 完整 URL 或 file-read-{id}.{ext} 路徑
    * @returns {Promise<{buffer: Buffer, mimeType: string}>}
    */
@@ -616,22 +616,33 @@ export class ZenTaoAPI {
       url = url.startsWith('/') ? `${new URL(this.baseUrl).origin}${url}` : `${this.baseUrl}/${url}`;
     }
 
-    const resp = await fetch(url, {
-      headers: { 'Cookie': `${this.sessionName}=${this.sessionId}` },
-      redirect: 'follow'
-    });
+    const cookieHeader = { 'Cookie': `${this.sessionName}=${this.sessionId}` };
 
-    if (!resp.ok) {
-      throw new Error(`Fetch file failed: ${resp.status} ${url}`);
-    }
+    const fetchFn = async () => {
+      const resp = await fetch(url, {
+        headers: cookieHeader,
+        redirect: 'follow'
+      });
+      const arrayBuffer = await resp.arrayBuffer();
+      const ct = resp.headers.get('content-type') || 'application/octet-stream';
+      // 若為 HTML（過期重導），轉成 text 供 isSessionExpired 偵測
+      const text = ct.includes('text/html')
+        ? new TextDecoder().decode(arrayBuffer)
+        : '';
+      return { resp, text, arrayBuffer, ct };
+    };
 
-    const contentType = resp.headers.get('content-type') || 'application/octet-stream';
-    const contentLength = resp.headers.get('content-length');
-    if (contentLength && Number(contentLength) > 10 * 1024 * 1024) {
-      throw new Error(`File too large: ${contentLength} bytes`);
-    }
-    const arrayBuffer = await resp.arrayBuffer();
-    return { buffer: Buffer.from(arrayBuffer), mimeType: contentType };
+    return this._requestWithRelogin(
+      fileUrl,
+      fetchFn,
+      (fr) => {
+        const contentLength = fr.resp.headers.get('content-length');
+        if (contentLength && Number(contentLength) > 10 * 1024 * 1024) {
+          throw new Error(`File too large: ${contentLength} bytes`);
+        }
+        return { buffer: Buffer.from(fr.arrayBuffer), mimeType: fr.ct };
+      }
+    );
   }
 
   /**

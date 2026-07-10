@@ -229,3 +229,63 @@ describe('postOldApi with relogin', () => {
     }
   });
 });
+
+describe('fetchFile with relogin', () => {
+  it('正常圖片下載回傳 buffer + mimeType', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn();
+
+    const fakePng = new Uint8Array([0x89, 0x50, 0x4E, 0x47]); // PNG magic bytes
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => ({
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'image/png' : null },
+      arrayBuffer: async () => fakePng.buffer
+    });
+
+    try {
+      const result = await api.fetchFile('file-read-123.png');
+      assert.equal(result.mimeType, 'image/png');
+      assert.ok(result.buffer.length > 0);
+      assert.equal(api.login.mock.callCount(), 0);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('過期時自動重登後重試下載', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn(async () => 'new-session');
+
+    const fakePng = new Uint8Array([0x89, 0x50, 0x4E, 0x47]);
+    const expiredHtml = `<script>self.location='/user-login-x.json';</script>`;
+    const expiredBuf = new TextEncoder().encode(expiredHtml);
+
+    const originalFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = async (url, opts) => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          ok: true, status: 200,
+          headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+          arrayBuffer: async () => expiredBuf.buffer
+        };
+      }
+      return {
+        ok: true, status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'image/png' : null },
+        arrayBuffer: async () => fakePng.buffer
+      };
+    };
+
+    try {
+      const result = await api.fetchFile('file-read-123.png');
+      assert.equal(result.mimeType, 'image/png');
+      assert.equal(api.login.mock.callCount(), 1);
+      assert.equal(callCount, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
