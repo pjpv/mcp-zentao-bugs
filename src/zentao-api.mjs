@@ -118,17 +118,20 @@ export class ZenTaoAPI {
   }
 
   /**
-   * 發送 GET 請求並解析舊版 API 回應
+   * 發送 GET 請求並解析舊版 API 回應（含自動重登）
    */
   async fetchOldApi(path) {
-    const resp = await fetch(`${this.baseUrl}/${path}`, {
-      headers: this.getAuthHeaders()
-    });
-    if (!resp.ok) {
-      throw new Error(`GET /${path} failed: ${resp.status}`);
-    }
-    const json = await resp.json();
-    return this.parseOldApiResponse(json);
+    return this._requestWithRelogin(
+      path,
+      async () => {
+        const resp = await fetch(`${this.baseUrl}/${path}`, {
+          headers: this.getAuthHeaders()
+        });
+        const text = await resp.text();
+        return { resp, text };
+      },
+      (fr) => this.parseOldApiResponse(JSON.parse(fr.text))
+    );
   }
 
   /**

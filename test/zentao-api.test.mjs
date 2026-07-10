@@ -136,3 +136,41 @@ describe('_requestWithRelogin', () => {
     assert.equal(result.size, 4);
   });
 });
+
+describe('fetchOldApi with relogin', () => {
+  it('session 過期時自動重登並重發 GET 請求', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn(async () => 'new-session');
+
+    // mock global fetch
+    const originalFetch = globalThis.fetch;
+    let callCount = 0;
+    globalThis.fetch = async (url, opts) => {
+      callCount++;
+      if (callCount === 1) {
+        // 模擬過期
+        return {
+          ok: true,
+          status: 200,
+          headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+          text: async () => `<script>self.location='/user-login-x.json';</script>`
+        };
+      }
+      // 第二次正常
+      return {
+        ok: true,
+        status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+        text: async () => '{"status":"success","data":"{\\"id\\":1}"}'
+      };
+    };
+
+    try {
+      const result = await api.fetchOldApi('product-all.json');
+      assert.equal(api.login.mock.callCount(), 1);
+      assert.equal(result.id, 1);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
