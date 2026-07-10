@@ -16,7 +16,7 @@
     "prepublishOnly": "npm run test",
     "prepare": "npm run build",
     "build": "echo 'No build step required for this project'",
-    "test": "echo 'No tests yet' && exit 0",
+    "test": "node --test \"test/**/*.test.mjs\"",
     "lint": "echo 'No linter configured' && exit 0",
     "version": "npm run build && git add -A",
     "postversion": "git push && git push --tags",
