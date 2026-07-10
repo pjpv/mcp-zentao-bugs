@@ -71,6 +71,37 @@ export class ZenTaoAPI {
   }
 
   /**
+   * 帶 session 過期偵測的請求包裝器
+   * 偵測到過期時自動重登並重試一次；重登後仍過期則拋明確錯誤
+   * @param {string} path - API 路徑（僅用於錯誤訊息）
+   * @param {Function} fetchFn - async () => { resp, text, ...extra }
+   * @param {Function} parseFn - (fetchResult) => any，接收 fetchFn 的完整回傳物件
+   * @returns {Promise<any>} parseFn 的結果
+   */
+  async _requestWithRelogin(path, fetchFn, parseFn) {
+    const fetchResult = await fetchFn();
+
+    if (!fetchResult.resp.ok) {
+      throw new Error(`/${path} failed: ${fetchResult.resp.status}`);
+    }
+
+    if (this.isSessionExpired(fetchResult.resp, fetchResult.text)) {
+      console.error(`Session expired on /${path}, re-logging in...`);
+      await this.login();
+      const retryResult = await fetchFn();
+      if (!retryResult.resp.ok) {
+        throw new Error(`/${path} retry failed: ${retryResult.resp.status}`);
+      }
+      if (this.isSessionExpired(retryResult.resp, retryResult.text)) {
+        throw new Error(`Session expired after re-login on /${path} — check credentials`);
+      }
+      return parseFn(retryResult);
+    }
+
+    return parseFn(fetchResult);
+  }
+
+  /**
    * 解析禪道 12.x 舊版 API 回傳格式
    * 舊版格式：{"status":"success","data":"<JSON字串>"}
    * data 欄位是被轉義的 JSON 字串，需要二次解析
