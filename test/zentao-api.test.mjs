@@ -255,16 +255,18 @@ describe('fetchFile with relogin', () => {
 
   it('過期時自動重登後重試下載', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
-    api.login = mock.fn(async () => 'new-session');
+    api.login = mock.fn(async () => { api.sessionId = 'new-session'; return 'new-session'; });
 
     const fakePng = new Uint8Array([0x89, 0x50, 0x4E, 0x47]);
     const expiredHtml = `<script>self.location='/user-login-x.json';</script>`;
     const expiredBuf = new TextEncoder().encode(expiredHtml);
 
+    const sentCookies = [];
     const originalFetch = globalThis.fetch;
     let callCount = 0;
     globalThis.fetch = async (url, opts) => {
       callCount++;
+      sentCookies.push(opts.headers.Cookie);
       if (callCount === 1) {
         return {
           ok: true, status: 200,
@@ -284,6 +286,8 @@ describe('fetchFile with relogin', () => {
       assert.equal(result.mimeType, 'image/png');
       assert.equal(api.login.mock.callCount(), 1);
       assert.equal(callCount, 2);
+      // 重試時應使用重登後的新 session（cookie 在 fetchFn 內部構造，才會拿到刷新的 sessionId）
+      assert.equal(sentCookies[1], 'zentaosid=new-session');
     } finally {
       globalThis.fetch = originalFetch;
     }

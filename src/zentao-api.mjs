@@ -162,7 +162,7 @@ export class ZenTaoAPI {
    * 注意：過期重導（user-login）已由 _requestWithRelogin 先行攔截，不會走到這裡
    */
   _parsePostResponse(path, text) {
-    if (text.trimStart().startsWith('<html')) {
+    if (text.trimStart().startsWith('<html') || text.includes('parent.location=')) {
       const redirectMatch = text.match(/parent\.location='([^']+)'/);
       if (redirectMatch) {
         return { success: true, redirect: redirectMatch[1] };
@@ -616,11 +616,9 @@ export class ZenTaoAPI {
       url = url.startsWith('/') ? `${new URL(this.baseUrl).origin}${url}` : `${this.baseUrl}/${url}`;
     }
 
-    const cookieHeader = { 'Cookie': `${this.sessionName}=${this.sessionId}` };
-
     const fetchFn = async () => {
       const resp = await fetch(url, {
-        headers: cookieHeader,
+        headers: { 'Cookie': `${this.sessionName}=${this.sessionId}` },
         redirect: 'follow'
       });
       const arrayBuffer = await resp.arrayBuffer();
