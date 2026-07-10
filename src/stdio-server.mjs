@@ -6,130 +6,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema
 } from '@modelcontextprotocol/sdk/types.js';
-
-class ZenTaoAPI {
-  constructor(baseUrl, account, password) {
-    this.baseUrl = baseUrl.replace(/\/$/, '');
-    this.account = account;
-    this.password = password;
-    this.sessionId = '';
-    this.sessionName = 'zentaosid';
-  }
-
-  async login() {
-    const sessionResp = await fetch(`${this.baseUrl}/api-getsessionid.json`);
-    const sessionData = await sessionResp.json();
-    const session = typeof sessionData.data === 'string' ? JSON.parse(sessionData.data) : sessionData.data;
-    this.sessionId = session.sessionID;
-    this.sessionName = session.sessionName || 'zentaosid';
-
-    const loginResp = await fetch(`${this.baseUrl}/user-login.json`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': `${this.sessionName}=${this.sessionId}`
-      },
-      body: `account=${encodeURIComponent(this.account)}&password=${encodeURIComponent(this.password)}&keepLogin=1`,
-      redirect: 'manual'
-    });
-
-    if (loginResp.status !== 200) {
-      const text = await loginResp.text();
-      throw new Error(`Login failed: ${text}`);
-    }
-
-    return this.sessionId;
-  }
-
-  getAuthHeaders() {
-    return {
-      'Content-Type': 'application/json',
-      'Cookie': `${this.sessionName}=${this.sessionId}`
-    };
-  }
-
-  parseOldApiResponse(json) {
-    if (json.status === 'success' && typeof json.data === 'string') {
-      return JSON.parse(json.data);
-    }
-    if (json.status === 'success' && typeof json.data === 'object') {
-      return json.data;
-    }
-    return json;
-  }
-
-  async fetchOldApi(path) {
-    const resp = await fetch(`${this.baseUrl}/${path}`, {
-      headers: this.getAuthHeaders()
-    });
-    if (!resp.ok) {
-      throw new Error(`GET /${path} failed: ${resp.status}`);
-    }
-    const json = await resp.json();
-    return this.parseOldApiResponse(json);
-  }
-
-  async searchProducts(keyword = '', limit = 20) {
-    const data = await this.fetchOldApi('product-all.json');
-    const productsMap = data.products || {};
-    let list = Object.entries(productsMap).map(([id, name]) => ({
-      id: Number(id),
-      name
-    }));
-
-    if (keyword) {
-      list = list.filter(p =>
-        String(p.name || '').toLowerCase().includes(keyword.toLowerCase())
-      );
-    }
-
-    return list.slice(0, limit);
-  }
-
-  async getBugDetail(bugId) {
-    const data = await this.fetchOldApi(`bug-view-${bugId}.json`);
-    const bug = data.bug || data;
-
-    return {
-      id: bug.id,
-      title: bug.title,
-      severity: bug.severity,
-      status: bug.status,
-      assignedTo: bug.assignedTo,
-      openedBy: bug.openedBy,
-      resolution: bug.resolution
-    };
-  }
-
-  async browseBugs(productId, options = {}) {
-    const { browseType = 'assigntome', limit = 20 } = options;
-    const path = `bug-browse-${productId}-0-${browseType}-0-id_desc-0-${limit}-1.json`;
-    const data = await this.fetchOldApi(path);
-    return data.bugs || [];
-  }
-
-  async markBugResolved(bugId, options = {}) {
-    const { resolution = 'fixedcodeerror', comment = '' } = options;
-    const params = new URLSearchParams();
-    params.set('resolution', resolution);
-    if (comment) params.set('comment', comment);
-
-    const resp = await fetch(`${this.baseUrl}/bug-resolve-${bugId}.json`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Cookie': `${this.sessionName}=${this.sessionId}`
-      },
-      body: params.toString()
-    });
-
-    if (!resp.ok) {
-      throw new Error(`POST /bug-resolve-${bugId}.json failed: ${resp.status}`);
-    }
-
-    return { success: true };
-  }
-}
+import { ZenTaoAPI } from './zentao-api.mjs';
 
 // Create MCP server
 const server = new Server(
@@ -212,13 +89,17 @@ if (!BASE_URL || !ACCOUNT || !PASSWORD) {
 
 const zentaoAPI = new ZenTaoAPI(BASE_URL, ACCOUNT, PASSWORD);
 
+// 啟動時登入一次，之後靠 _requestWithRelogin 自動處理過期
+await zentaoAPI.login().catch(err => {
+  console.error('Fatal: login failed:', err?.message || err);
+  process.exit(1);
+});
+
 // Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   try {
-    await zentaoAPI.login();
-
     switch (name) {
       case 'searchProducts': {
         const result = await zentaoAPI.searchProducts(args?.keyword, args?.limit);
