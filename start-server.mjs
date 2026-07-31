@@ -30,12 +30,8 @@ async function startServer() {
 
   console.error(`🚀 啟動禪道 MCP 服務器 (端口 ${PORT})...`);
 
-  const env = {
-    ...process.env,
-    ZENTAO_BASE_URL: process.env.ZENTAO_BASE_URL ,
-    ZENTAO_ACCOUNT: process.env.ZENTAO_ACCOUNT ,
-    ZENTAO_PASSWORD: process.env.ZENTAO_PASSWORD ,
-  };
+  // 環境變量直接繼承 process.env（ZENTAO_BASE_URL / ACCOUNT / PASSWORD 必須由外部設定，不提供默認值）
+  const env = { ...process.env };
 
   const child = spawn('npm', ['exec', '-y', 'mcp-zentao-bugs-v12@latest'], {
     env,
