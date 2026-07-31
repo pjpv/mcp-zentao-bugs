@@ -231,7 +231,7 @@ describe('postOldApi with relogin', () => {
 });
 
 describe('confirmBug', () => {
-  it('成功確認：POST bug-confirm-{id}.json，body 含正確欄位', async () => {
+  it('成功確認：POST bug-confirmBug-{id}.json，body 含正確欄位', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
     const captured = {};
 
@@ -255,7 +255,7 @@ describe('confirmBug', () => {
         mailto: ['alice', 'bob'],
       });
       assert.equal(result.success, true);
-      assert.match(captured.url, /bug-confirm-77\.json$/);
+      assert.match(captured.url, /bug-confirmBug-77\.json$/);
       assert.match(captured.body, /assignedTo=john/);
       assert.match(captured.body, /type=codeerror/);
       assert.match(captured.body, /pri=2/);
@@ -306,7 +306,7 @@ describe('confirmBug', () => {
 });
 
 describe('assignBug', () => {
-  it('成功轉交：POST bug-assignto-{id}.json（注意小寫），body 含 assignedTo', async () => {
+  it('成功轉交：POST bug-assignTo-{id}.json（注意駝峰），body 含 assignedTo', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
     const captured = {};
 
@@ -327,7 +327,7 @@ describe('assignBug', () => {
         comment: '後端已新增 API 欄位，請前端對接',
       });
       assert.equal(result.success, true);
-      assert.match(captured.url, /bug-assignto-88\.json$/); // 非 assignTo
+      assert.match(captured.url, /bug-assignTo-88\.json$/); // 駝峰 assignTo，非 assignto
       assert.match(captured.body, /assignedTo=frontdev/);
     } finally {
       globalThis.fetch = originalFetch;
@@ -337,6 +337,32 @@ describe('assignBug', () => {
   it('缺少 assignedTo 時拋錯', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
     await assert.rejects(() => api.assignBug(5, {}), /assignedTo/);
+  });
+});
+
+describe('_parsePostResponse user-deny 偵測', () => {
+  it('端點錯誤（user-deny）拋明確錯誤，而非籠統的 unexpected body', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    api.login = mock.fn();
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+      // 禪道對不存在/無權限的端點回 self.location 重導到 user-deny
+      text: async () => `<html><meta charset='utf-8'/><style>body{background:white}</style><script>self.location='/zentao/user-deny-bug-confirm.json';\n\n</script>`
+    });
+
+    try {
+      // 模擬端點打錯（bug-confirm 而非 bug-confirmBug）觸發的 user-deny
+      await assert.rejects(
+        () => api.postOldApi('bug-confirm-77.json', 'pri=1'),
+        /user-deny.*請檢查帳號權限或 API 端點名稱/s
+      );
+      assert.equal(api.login.mock.callCount(), 0, 'user-deny 不是 session 過期，不應重登');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

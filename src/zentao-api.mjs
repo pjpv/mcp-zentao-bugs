@@ -162,11 +162,18 @@ export class ZenTaoAPI {
    * 注意：過期重導（user-login）已由 _requestWithRelogin 先行攔截，不會走到這裡
    */
   _parsePostResponse(path, text) {
+    // 成功寫入操作回傳 HTML，含 parent.location= 重導。
+    // 注意：deny/過期等頁也以 <html 開頭，但用 self.location=（非 parent.location=），
+    // regex 不匹配會落空，繼續走到下方的 user-deny / JSON.parse 分支判斷。
     if (text.trimStart().startsWith('<html') || text.includes('parent.location=')) {
       const redirectMatch = text.match(/parent\.location='([^']+)'/);
       if (redirectMatch) {
         return { success: true, redirect: redirectMatch[1] };
       }
+    }
+    // 端點不存在 / 無權限：禪道回傳 self.location 重導到 user-deny（如 bug-confirm 誤打成 confirm）
+    if (text.includes('user-deny')) {
+      throw new Error(`權限不足或端點不存在：POST /${path} 被禪道拒絕（user-deny）。請檢查帳號權限或 API 端點名稱。`);
     }
     let json;
     try { json = JSON.parse(text); } catch {
@@ -748,7 +755,7 @@ export class ZenTaoAPI {
   /**
    * 確認 Bug（confirmed 置為 1，但不標記為已解決）
    * 適用「已提交代碼但尚未部署到測試服務器驗證」的情境。
-   * 使用舊版 API: /bug-confirm-{id}.json
+   * 使用舊版 API: /bug-confirmBug-{id}.json（禪道路由保留原方法名 confirmBug 駝峰，以網頁端實證為準）
    *
    * 可設欄位（全部可選，未提供時由禪道沿用現值）：
    *   assignedTo - 確認後指派給（用戶帳號）
@@ -774,14 +781,14 @@ export class ZenTaoAPI {
     if (comment) params.set('comment', comment);
     if (Array.isArray(mailto) && mailto.length) params.set('mailto', mailto.join(','));
 
-    const data = await this.postOldApi(`bug-confirm-${bugId}.json`, params.toString());
+    const data = await this.postOldApi(`bug-confirmBug-${bugId}.json`, params.toString());
     return data;
   }
 
   /**
    * 轉交 Bug（指派給另一人接手，不變更解決狀態）
    * 適用「後端改完轉交前端接手」「需他人介入」等協作情境。
-   * 使用舊版 API: /bug-assignto-{id}.json（PHP 方法 assignTo 經路由轉小寫）
+   * 使用舊版 API: /bug-assignTo-{id}.json（禪道路由保留原方法名 assignTo 駝峰，以網頁端實證為準，非 bug-assignto）
    *
    * @param {number} bugId - Bug ID
    * @param {Object} options - 轉交選項
@@ -801,7 +808,7 @@ export class ZenTaoAPI {
     if (comment) params.set('comment', comment);
     if (Array.isArray(mailto) && mailto.length) params.set('mailto', mailto.join(','));
 
-    const data = await this.postOldApi(`bug-assignto-${bugId}.json`, params.toString());
+    const data = await this.postOldApi(`bug-assignTo-${bugId}.json`, params.toString());
     return data;
   }
 
