@@ -763,6 +763,10 @@ export class ZenTaoAPI {
   async confirmBug(bugId, options = {}) {
     const { assignedTo = '', type = '', pri, comment = '', mailto = [] } = options;
 
+    if (pri !== undefined && pri !== null && !Number.isInteger(pri)) {
+      throw new Error('confirmBug 的 pri 必須為整數');
+    }
+
     const params = new URLSearchParams();
     if (assignedTo) params.set('assignedTo', assignedTo);
     if (type) params.set('type', type);

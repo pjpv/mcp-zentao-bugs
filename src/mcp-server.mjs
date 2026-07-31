@@ -443,7 +443,7 @@ server.addTool({
       'codeerror', 'config', 'install', 'security', 'performance',
       'standard', 'automation', 'designdefect', 'others',
     ]).optional().describe('Bug 類型'),
-    pri: z.number().optional().describe('優先級（整數）'),
+    pri: z.number().int().optional().describe('優先級（整數）'),
     comment: z.string().optional().describe('備註說明'),
     mailto: z.array(z.string()).optional().describe('抄送帳號陣列'),
   }),

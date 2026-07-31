@@ -287,6 +287,20 @@ describe('confirmBug', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('pri 為非整數（如 2.5）時拋錯，不發送請求', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    let called = false;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => { called = true; return { ok: true, text: async () => '' }; };
+
+    try {
+      await assert.rejects(() => api.confirmBug(1, { pri: 2.5 }), /pri/);
+      assert.equal(called, false); // 不應發出任何請求
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
 
 describe('assignBug', () => {
