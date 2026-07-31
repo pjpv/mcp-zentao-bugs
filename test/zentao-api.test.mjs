@@ -265,7 +265,7 @@ describe('confirmBug', () => {
     }
   });
 
-  it('未提供選項時 body 為空字串', async () => {
+  it('未提供選項時 body 為空字串，且回應正確解析為 success+redirect', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
     const captured = {};
 
@@ -281,7 +281,9 @@ describe('confirmBug', () => {
 
     try {
       const result = await api.confirmBug(1);
+      // 鎖定 _parsePostResponse 對 confirm 回應（HTML 重導）的解析契約
       assert.equal(result.success, true);
+      assert.equal(result.redirect, '/zentao/bug-view-1.html');
       assert.equal(captured.body, '');
     } finally {
       globalThis.fetch = originalFetch;
