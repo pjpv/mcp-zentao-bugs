@@ -292,6 +292,7 @@ server.addTool({
       'toclosed', 'unresolved', 'unconfirmed', 'assigntonull',
       'longlifebugs', 'postponedbugs', 'overduebugs', 'needconfirm'
     ]).optional().default('assigntome').describe('篩選類型，預設 assigntome（指派給我）'),
+    moduleId: z.number().optional().describe('模塊 ID，限定 Bug 範圍至該模塊。父子模塊自動遞迴含子模塊。可用 getModules 查詢模塊 ID。⚠️ 與 browseType 的互動：assigntome + moduleId 改走 byModule 並客戶端過濾指派人（正確疊加）；但 openedbyme/resolvedbyme 等其他人員類型 + moduleId 時會只保留模塊範圍、丟失該人員篩選（禪道 server 限制），如需兩者請用 all+moduleId 自行過濾'),
     keyword: z.string().optional().describe('BUG 標題關鍵詞搜索（客戶端過濾）'),
     limit: z.number().optional().default(20).describe('返回數量限制，預設 20 條')
   }),
@@ -300,10 +301,11 @@ server.addTool({
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          log.info(`正在獲取 BUG 列表（${args.browseType}）...`);
+          log.info(`正在獲取 BUG 列表（${args.browseType}${args.moduleId ? `/moduleId=${args.moduleId}` : ''}）...`);
 
           const bugs = await zentaoAPI.browseBugs(args.productId, {
             browseType: args.browseType,
+            moduleId: args.moduleId,
             keyword: args.keyword,
             limit: args.limit
           });
@@ -429,21 +431,23 @@ server.addTool({
 server.addTool({
   name: 'getNextBug',
   description: '获取下一个需要处理的BUG（指派给我的激活BUG）。使用 for yield 生成器模式，高效找到第一个匹配的BUG后立即返回。这是开始工作时最常用的工具。必须指定产品ID以保持专注',
-  parameters: z.object({ 
+  parameters: z.object({
     productId: z.number().describe('指定产品ID（必需）'),
-    keyword: z.string().optional().describe('BUG标题关键词，用于快速定位特定类型的BUG')
+    keyword: z.string().optional().describe('BUG标题关键词，用于快速定位特定类型的BUG'),
+    moduleId: z.number().optional().describe('模塊 ID，限定查找範圍至該模塊。父子模塊自動遞迴含子模塊。可用 getModules 查詢模塊 ID')
   }),
   annotations: { title: 'Get Next Bug', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          log.info('正在获取下一个需要处理的BUG...');
-          
+          log.info(`正在获取下一个需要处理的BUG${args.moduleId ? `（moduleId=${args.moduleId}）` : ''}...`);
+
           // 直接在指定产品中查找
           const bug = await zentaoAPI.searchFirstActiveBug(args.productId, {
             keyword: args.keyword,
-            assignedToMe: true
+            assignedToMe: true,
+            moduleId: args.moduleId
           });
           
           if (bug) {
@@ -488,17 +492,19 @@ server.addTool({
       'assigntome', 'all', 'unclosed', 'openedbyme', 'resolvedbyme',
       'toclosed', 'unresolved', 'unconfirmed', 'assigntonull',
       'longlifebugs', 'postponedbugs', 'overduebugs', 'needconfirm'
-    ]).optional().default('assigntome').describe('篩選類型，預設 assigntome')
+    ]).optional().default('assigntome').describe('篩選類型，預設 assigntome'),
+    moduleId: z.number().optional().describe('模塊 ID，限定統計範圍至該模塊。assigntome + moduleId 時 total 為第一頁過濾後筆數（非精確總數），hasMore=true（後續頁面可能還有）。⚠️ openedbyme/resolvedbyme + moduleId 時只保留模塊範圍、丟失人員篩選（禪道 server 限制）')
   }),
   annotations: { title: 'Get Bug Statistics', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
     return await new Promise((resolve) => {
       enqueue(async () => {
         try {
-          log.info(`正在獲取 BUG 統計（${args.browseType}）...`);
+          log.info(`正在獲取 BUG 統計（${args.browseType}${args.moduleId ? `/moduleId=${args.moduleId}` : ''}）...`);
 
           const result = await zentaoAPI.browseBugsWithTotal(args.productId, {
-            browseType: args.browseType
+            browseType: args.browseType,
+            moduleId: args.moduleId
           });
 
           resolve({
@@ -509,7 +515,50 @@ server.addTool({
                 hasMore: result.hasMore,
                 preview: result.bugs.slice(0, 5),
                 browseType: args.browseType,
+                moduleId: args.moduleId ?? null,
                 productId: args.productId
+              })
+            }]
+          });
+        } catch (err) {
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
+          });
+        }
+      });
+    });
+  },
+});
+
+server.addTool({
+  name: 'getModules',
+  description: '獲取產品的模塊列表（Bug 分類）。每個模塊有 ID 與路徑名稱（如 /App、/Web/Console）。模塊 ID 用於 getMyBugs / getBugStats / getNextBug 的 moduleId 參數限定 Bug 範圍。父子模塊自動遞迴包含子模塊的 Bug（查 /Web 會含 /Web/Console）。',
+  parameters: z.object({
+    productId: z.number().describe('產品 ID（必需）')
+  }),
+  annotations: { title: 'Get Modules', readOnlyHint: true, openWorldHint: true },
+  execute: async (args, { log }) => {
+    return await new Promise((resolve) => {
+      enqueue(async () => {
+        try {
+          if (!Number.isFinite(args.productId)) throw new UserError('productId 必須為數字');
+          log.info(`正在獲取產品 ${args.productId} 的模塊列表...`);
+
+          const modules = await zentaoAPI.getModules(args.productId);
+
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                modules,
+                count: modules.length,
+                productId: args.productId,
+                message: `產品 ${args.productId} 共有 ${modules.length} 個模塊`
               })
             }]
           });

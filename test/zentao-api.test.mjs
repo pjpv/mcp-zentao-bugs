@@ -293,3 +293,280 @@ describe('fetchFile with relogin', () => {
     }
   });
 });
+
+describe('_resolveBrowseStrategy', () => {
+  const api = new ZenTaoAPI('http://localhost', 'testuser', 'pass');
+
+  it('無 moduleId 時維持原 browseType，param=0，不過濾', () => {
+    const r = api._resolveBrowseStrategy('assigntome', undefined);
+    assert.deepEqual(r, { serverBrowseType: 'assigntome', serverParam: 0, needClientAssignedFilter: false });
+  });
+
+  it('assigntome + moduleId 走 byModule + 客戶端過濾', () => {
+    const r = api._resolveBrowseStrategy('assigntome', 1090);
+    assert.deepEqual(r, { serverBrowseType: 'byModule', serverParam: 1090, needClientAssignedFilter: true });
+  });
+
+  it('其他類型 + moduleId 走 byModule 但不過濾指派人', () => {
+    const r = api._resolveBrowseStrategy('unclosed', 1090);
+    assert.deepEqual(r, { serverBrowseType: 'byModule', serverParam: 1090, needClientAssignedFilter: false });
+  });
+});
+
+describe('browseBugs module 篩選', () => {
+  // 構造禪道舊版 API 回應：data 欄位為轉義 JSON 字串
+  function makeBugResponse(bugs, extra = {}) {
+    const data = JSON.stringify({ bugs, ...extra });
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+      text: async () => JSON.stringify({ status: 'success', data })
+    };
+  }
+
+  it('無 moduleId 時 URL param 段為 0（向後相容）', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrl = url; return makeBugResponse([]); };
+    try {
+      await api.browseBugs(74, { browseType: 'assigntome', limit: 20 });
+      assert.ok(capturedUrl.includes('-assigntome-0-id_desc-'),
+        `URL 應含 -assigntome-0-，實際: ${capturedUrl}`);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('有 moduleId 時走 byModule，param 段為模塊 ID', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrl = url; return makeBugResponse([]); };
+    try {
+      await api.browseBugs(74, { browseType: 'unclosed', moduleId: 1090, limit: 20 });
+      assert.ok(capturedUrl.includes('-byModule-1090-id_desc-'),
+        `URL 應含 -byModule-1090-，實際: ${capturedUrl}`);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('assigntome + moduleId 客戶端過濾只回傳指派給我的（不區分大小寫）', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    // 模擬禪道實際行為：assignedTo 首字大寫（Testuser），與登入帳號（testuser）不一致
+    const bugs = [
+      { id: 1, assignedTo: 'Testuser', status: 'active', title: '我的' },
+      { id: 2, assignedTo: 'other', status: 'active', title: '別人的' },
+      { id: 3, assignedTo: 'testuser', status: 'active', title: '也是我的' },
+    ];
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrl = url; return makeBugResponse(bugs); };
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 20 });
+      assert.ok(capturedUrl.includes('-byModule-1090-'), '應走 byModule');
+      assert.equal(result.length, 2, '大小寫不一致仍應過濾出我的');
+      assert.deepEqual(result.map(b => b.id), [1, 3]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('純 byModule（非 assigntome）不做指派人過濾', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    const bugs = [
+      { id: 1, assignedTo: 'testuser', status: 'active', title: 'a' },
+      { id: 2, assignedTo: 'other', status: 'active', title: 'b' },
+    ];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => makeBugResponse(bugs);
+    try {
+      const result = await api.browseBugs(74, { browseType: 'unclosed', moduleId: 1090, limit: 20 });
+      assert.equal(result.length, 2, 'unclosed+moduleId 不應過濾指派人');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('getModules', () => {
+  function mockModulesResponse(modules) {
+    const data = JSON.stringify({ bugs: [], modules });
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+      text: async () => JSON.stringify({ status: 'success', data })
+    };
+  }
+
+  it('正確解析 modules，排除根節點，名稱取路徑最後一段', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return mockModulesResponse({
+        '0': '/', '1090': '/App', '1091': '/Web', '1092': '/Web/Console'
+      });
+    };
+    try {
+      const result = await api.getModules(74);
+      assert.ok(capturedUrl.includes('bug-browse-74-0-unclosed-0-'),
+        `應用 unclosed 端點取模塊表，實際: ${capturedUrl}`);
+      assert.equal(result.length, 3, '排除 id=0 根節點');
+      assert.deepEqual(result, [
+        { id: 1090, path: '/App', name: 'App' },
+        { id: 1091, path: '/Web', name: 'Web' },
+        { id: 1092, path: '/Web/Console', name: 'Console' },
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('無 modules 欄位時回傳空陣列', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => mockModulesResponse({});
+    try {
+      const result = await api.getModules(74);
+      assert.deepEqual(result, []);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('browseBugsWithTotal module 篩選', () => {
+  function makeBugResponseWithPager(bugs, recTotal) {
+    const data = JSON.stringify({ bugs, pager: { recTotal: String(recTotal) } });
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+      text: async () => JSON.stringify({ status: 'success', data })
+    };
+  }
+
+  it('assigntome + moduleId 客戶端過濾，hasMore=true（非精確）', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    // 第一頁含他人與我的 bug，過濾後剩 2 筆，但後續頁面可能還有
+    const bugs = [
+      { id: 1, assignedTo: 'Testuser', status: 'active', title: 'a' },
+      { id: 2, assignedTo: 'other', status: 'active', title: 'b' },
+      { id: 3, assignedTo: 'Testuser', status: 'active', title: 'c' },
+    ];
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrl = url; return makeBugResponseWithPager(bugs, 50); };
+    try {
+      const result = await api.browseBugsWithTotal(74, { browseType: 'assigntome', moduleId: 1090 });
+      assert.ok(capturedUrl.includes('-byModule-1090-'), '應走 byModule');
+      assert.equal(result.bugs.length, 2, '過濾後剩 2 筆');
+      assert.equal(result.total, 2, 'total 為過濾後筆數');
+      assert.equal(result.hasMore, true, 'client-filter 情境應回傳 hasMore=true（非精確）');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('searchFirstActiveBugGenerator module 篩選', () => {
+  function makeBugResponse(bugs) {
+    const data = JSON.stringify({ bugs });
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+      text: async () => JSON.stringify({ status: 'success', data })
+    };
+  }
+
+  it('assigntome + moduleId generator 客戶端過濾並 yield 指派給我的激活 bug', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    const bugs = [
+      { id: 1, assignedTo: 'other', status: 'active', title: '別人的' },
+      { id: 2, assignedTo: 'Testuser', status: 'resolved', title: '我但已解決' },
+      { id: 3, assignedTo: 'testuser', status: 'active', title: '我的激活' },
+    ];
+    let capturedUrl = '';
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrl = url; return makeBugResponse(bugs); };
+    try {
+      const gen = api.searchFirstActiveBugGenerator(74, { assignedToMe: true, moduleId: 1090 });
+      const first = await gen.next();
+      assert.ok(capturedUrl.includes('-byModule-1090-'), '應走 byModule');
+      assert.equal(first.value.id, 3, '應跳過他人與已解決，取第一個指派給我的激活 bug');
+      assert.equal(first.value.status, 'active');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('browseBugs client-filter 多頁收集', () => {
+  // 驗證：客戶端過濾情境下，分頁迴圈會持續翻頁直到湊齊 limit 筆「指派給我」
+  function makeBugResponse(bugs) {
+    const data = JSON.stringify({ bugs });
+    return {
+      ok: true, status: 200,
+      headers: { get: (k) => k === 'content-type' ? 'application/json' : null },
+      text: async () => JSON.stringify({ status: 'success', data })
+    };
+  }
+
+  it('第 1 頁僅 1 筆我的，第 2 頁補齊 — 迴圈應翻 2 頁並回傳足量', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    // perPage 在 client-filter 下為 100；模擬第 1 頁 100 筆（僅 1 筆我的），第 2 頁 100 筆（3 筆我的）
+    const page1 = Array.from({ length: 99 }, (_, i) => ({ id: 1000 + i, assignedTo: 'other', status: 'active', title: 'x' }))
+      .concat([{ id: 1, assignedTo: 'Testuser', status: 'active', title: 'mine1' }]);
+    const page2 = Array.from({ length: 97 }, (_, i) => ({ id: 2000 + i, assignedTo: 'other', status: 'active', title: 'x' }))
+      .concat([
+        { id: 2, assignedTo: 'testuser', status: 'active', title: 'mine2' },
+        { id: 3, assignedTo: 'Testuser', status: 'active', title: 'mine3' },
+      ]);
+    const capturedUrls = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      return makeBugResponse(url.includes('-1.json') ? page1 : page2);
+    };
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 3 });
+      assert.equal(capturedUrls.length, 2, '應翻 2 頁（第 1 頁不足 limit 需續翻）');
+      assert.ok(capturedUrls[0].includes('-100-1.json'), '第 1 頁 perPage=100');
+      assert.ok(capturedUrls[1].includes('-100-2.json'), '第 2 頁');
+      assert.equal(result.length, 3, '應湊齊 3 筆指派給我的');
+      assert.deepEqual(result.map(b => b.id), [1, 2, 3]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('第 1 頁即湊齊 limit — 不應翻第 2 頁', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    const page1 = [
+      { id: 1, assignedTo: 'Testuser', status: 'active', title: 'mine1' },
+      { id: 2, assignedTo: 'testuser', status: 'active', title: 'mine2' },
+    ];
+    const capturedUrls = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => { capturedUrls.push(url); return makeBugResponse(page1); };
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 2 });
+      assert.equal(capturedUrls.length, 1, '第 1 頁即足量，不應翻第 2 頁');
+      assert.equal(result.length, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});

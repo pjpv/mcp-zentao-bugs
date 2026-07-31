@@ -300,32 +300,101 @@ export class ZenTaoAPI {
   }
 
   /**
+   * 決定實際傳給禪道 server 的 browseType 與 param 段
+   *
+   * 禪道 bug-browse URL 第 3 段為 browseType、第 4 段為 param。
+   * 模塊篩選的語法是 browseType='byModule' 且 param=模塊ID。
+   *
+   * 關鍵限制：禪道 server 不支援「指派類型 + 模塊」疊加
+   * （實測 assigntome-{moduleId} 會忽略模塊、回傳全模塊）。
+   * 對 assigntome 改用「server 走 byModule、客戶端過濾 assignedTo」變通。
+   * 其他人員類型（openedbyme/resolvedbyme）未實測疊加，不啟用客戶端過濾。
+   *
+   * @param {string} browseType - 使用者原始意圖的篩選類型
+   * @param {number} [moduleId] - 模塊 ID（選填）
+   * @returns {{serverBrowseType: string, serverParam: number, needClientAssignedFilter: boolean}}
+   */
+  _resolveBrowseStrategy(browseType, moduleId) {
+    if (!moduleId) {
+      return { serverBrowseType: browseType, serverParam: 0, needClientAssignedFilter: false };
+    }
+
+    // assigntome + moduleId：server 走 byModule，回傳後客戶端過濾指派人
+    if (browseType === 'assigntome') {
+      return {
+        serverBrowseType: 'byModule',
+        serverParam: moduleId,
+        needClientAssignedFilter: true
+      };
+    }
+
+    // 其他類型 + moduleId：統一走 byModule（原篩選條件由模塊範圍取代）
+    return {
+      serverBrowseType: 'byModule',
+      serverParam: moduleId,
+      needClientAssignedFilter: false
+    };
+  }
+
+  /**
+   * 判斷 Bug 是否指派給我（不區分大小寫）
+   *
+   * 禪道回傳的 assignedTo 大小寫可能與登入帳號不一致
+   * （如 "Testuser" vs env "testuser"），故用 toLowerCase 比對。
+   * 客戶端過濾的所有呼叫點共用此方法以保證比對邏輯一致。
+   *
+   * @param {Object} bug - Bug 物件
+   * @returns {boolean}
+   */
+  _isAssignedToMe(bug) {
+    return String(bug?.assignedTo).toLowerCase() === String(this.account).toLowerCase();
+  }
+
+  /**
    * 瀏覽 BUG 列表（直接使用伺服器端 browseType 篩選）
    * URL 格式：bug-browse-{productId}-{branch}-{browseType}-{param}-{orderBy}-{recTotal}-{recPerPage}-{pageID}.json
    *
    * @param {number} productId - 產品 ID
    * @param {Object} options
    * @param {string} options.browseType - 篩選類型（assigntome / all / unclosed / openedbyme / resolvedbyme / toclosed / unresolved / unconfirmed / assigntonull / longlifebugs / postponedbugs / overduebugs / needconfirm）
+   * @param {number} [options.moduleId] - 模塊 ID，限定 Bug 範圍至該模塊（父子模塊由 server 自動遞迴）。assigntome + moduleId 時改走 byModule 並客戶端過濾指派人
    * @param {string} [options.keyword] - 標題關鍵詞（客戶端過濾）
    * @param {number} [options.limit=20] - 回傳數量上限
    * @returns {Promise<Array>}
    */
   async browseBugs(productId, options = {}) {
-    const { browseType = 'assigntome', keyword = '', limit = 20 } = options;
+    const { browseType = 'assigntome', moduleId, keyword = '', limit = 20 } = options;
+    const strategy = this._resolveBrowseStrategy(browseType, moduleId);
+
     let allBugs = [];
     let page = 1;
-    const perPage = Math.min(limit, 100);
+    // 客戶端過濾情境丟棄率高，取 server 每頁上限 100 以減少翻頁次數
+    const perPage = strategy.needClientAssignedFilter ? 100 : Math.min(limit, 100);
     const maxPages = 50;
 
-    while (allBugs.length < limit && page <= maxPages) {
-      const path = `bug-browse-${productId}-0-${browseType}-0-id_desc-0-${perPage}-${page}.json`;
+    // 客戶端過濾情境（assigntome + moduleId）：需拉足量原始資料才能湊齊 limit 筆「指派給我」
+    // 一般情境：累積原始數量達 limit 即可停止
+    let myCount = 0; // 客戶端過濾情境下已收集的「指派給我」筆數（避免每輪重掃 allBugs）
+    while (page <= maxPages) {
+      const collected = strategy.needClientAssignedFilter ? myCount : allBugs.length;
+      if (collected >= limit) break;
+
+      const path = `bug-browse-${productId}-0-${strategy.serverBrowseType}-${strategy.serverParam}-id_desc-0-${perPage}-${page}.json`;
       const data = await this.fetchOldApi(path);
       const bugs = Array.isArray(data.bugs) ? data.bugs : [];
 
       if (bugs.length === 0) break;
+      if (strategy.needClientAssignedFilter) {
+        myCount += bugs.filter(b => this._isAssignedToMe(b)).length;
+      }
       allBugs = allBugs.concat(bugs);
       if (bugs.length < perPage) break;
       page++;
+    }
+
+    // assigntome + moduleId：客戶端過濾指派給我（彌補 server 不支援疊加）
+    if (strategy.needClientAssignedFilter) {
+      allBugs = allBugs.filter(b => this._isAssignedToMe(b));
     }
 
     // 僅在有關鍵詞時做客戶端過濾
@@ -341,17 +410,41 @@ export class ZenTaoAPI {
 
   /**
    * 瀏覽 BUG 並回傳總數（使用伺服器端分頁資訊）
+   *
+   * 注意：assigntome + moduleId 時走 byModule + 客戶端過濾，
+   * 此情境下的 total 為第一頁過濾後筆數（非精確總數），因 server 無法同時篩選模塊與指派人。
+   *
+   * @param {number} productId - 產品 ID
+   * @param {Object} options
+   * @param {string} [options.browseType='assigntome'] - 篩選類型
+   * @param {number} [options.moduleId] - 模塊 ID
+   * @returns {Promise<{total: number, hasMore: boolean, bugs: Array}>}
    */
   async browseBugsWithTotal(productId, options = {}) {
-    const { browseType = 'assigntome' } = options;
-    const path = `bug-browse-${productId}-0-${browseType}-0-id_desc-0-20-1.json`;
+    const { browseType = 'assigntome', moduleId } = options;
+    const strategy = this._resolveBrowseStrategy(browseType, moduleId);
+
+    const path = `bug-browse-${productId}-0-${strategy.serverBrowseType}-${strategy.serverParam}-id_desc-0-20-1.json`;
     const data = await this.fetchOldApi(path);
-    const bugs = Array.isArray(data.bugs) ? data.bugs : [];
-    const total = data.pager?.recTotal ? Number(data.pager.recTotal) : bugs.length;
+    let bugs = Array.isArray(data.bugs) ? data.bugs : [];
+
+    // assigntome + moduleId：客戶端過濾指派人
+    let total;
+    let hasMore;
+    if (strategy.needClientAssignedFilter) {
+      bugs = bugs.filter(b => this._isAssignedToMe(b));
+      // 客戶端過濾情境下，total 為本頁過濾後筆數（非精確總數，server 無法同時篩選模塊與指派人）
+      total = bugs.length;
+      // 只取了 1/N 頁，後續頁面很可能仍有指派給我的 bug，故標記為「可能有更多」
+      hasMore = true;
+    } else {
+      total = data.pager?.recTotal ? Number(data.pager.recTotal) : bugs.length;
+      hasMore = total > bugs.length;
+    }
 
     return {
       total,
-      hasMore: total > bugs.length,
+      hasMore,
       bugs: bugs.map(b => ({
         id: b.id,
         title: b.title,
@@ -364,20 +457,33 @@ export class ZenTaoAPI {
 
   /**
    * 检索第一个激活的BUG（使用generator）
+   *
+   * @param {number} productId - 產品 ID
+   * @param {Object} options
+   * @param {string} [options.keyword] - 標題關鍵詞
+   * @param {boolean} [options.assignedToMe=false] - 是否只取指派給我的
+   * @param {number} [options.moduleId] - 模塊 ID（與 assignedToMe 同時使用時走 byModule + 客戶端過濾）
    */
   async* searchFirstActiveBugGenerator(productId, options = {}) {
-    const { keyword = '', assignedToMe = false } = options;
-    const browseType = assignedToMe ? 'assigntome' : 'unclosed';
+    const { keyword = '', assignedToMe = false, moduleId } = options;
+    const baseBrowseType = assignedToMe ? 'assigntome' : 'unclosed';
+    const strategy = this._resolveBrowseStrategy(baseBrowseType, moduleId);
+
     let page = 1;
     const perPage = 50;
     const maxPages = 50;
 
     while (page <= maxPages) {
-      const path = `bug-browse-${productId}-0-${browseType}-0-id_desc-0-${perPage}-${page}.json`;
+      const path = `bug-browse-${productId}-0-${strategy.serverBrowseType}-${strategy.serverParam}-id_desc-0-${perPage}-${page}.json`;
       const data = await this.fetchOldApi(path);
-      const bugs = Array.isArray(data.bugs) ? data.bugs : [];
+      let bugs = Array.isArray(data.bugs) ? data.bugs : [];
 
       if (bugs.length === 0) break;
+
+      // assigntome + moduleId：客戶端過濾指派人（見 _isAssignedToMe）
+      if (strategy.needClientAssignedFilter) {
+        bugs = bugs.filter(b => this._isAssignedToMe(b));
+      }
 
       for (const bug of bugs) {
         const isActive = String(bug.status || '').toLowerCase() === 'active';
@@ -511,6 +617,41 @@ export class ZenTaoAPI {
     }
 
     return images;
+  }
+
+  /**
+   * 獲取產品的模塊列表（Bug 分類）
+   *
+   * 禪道 bug-browse 回應會附帶 `modules` 欄位（產品級模塊樹的扁平表），
+   * 即便只取 1 筆 Bug 也可取得完整模塊表。比 tree-browse 端點更穩
+   * （後者權限受 user-deny 限制）。
+   *
+   * modules 格式：{"0":"/","1090":"/App","1092":"/Web/Console"}
+   *   - key 為模塊 ID（字串）
+   *   - value 為完整路徑（以 / 分隔，子模塊為父路徑 + 名稱）
+   *
+   * 父子模塊遞迴由 server 處理：查父模塊（如 /Web）會自動包含子模塊（/Web/Console）的 Bug。
+   *
+   * @param {number} productId - 產品 ID
+   * @returns {Promise<Array<{id: number, path: string, name: string}>>}
+   */
+  async getModules(productId) {
+    // 取 1 筆 Bug 即可，回應附帶完整 modules 欄位
+    const path = `bug-browse-${productId}-0-unclosed-0-id_desc-0-1-1.json`;
+    const data = await this.fetchOldApi(path);
+
+    const modulesMap = data.modules || {};
+    return Object.entries(modulesMap)
+      .filter(([id]) => id !== '0') // 排除根節點佔位
+      .map(([id, fullPath]) => {
+        const segments = String(fullPath).split('/').filter(Boolean);
+        const name = segments[segments.length - 1] || fullPath;
+        return {
+          id: Number(id),
+          path: fullPath,
+          name
+        };
+      });
   }
 
   /**

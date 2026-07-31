@@ -55,7 +55,19 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           properties: {
             productId: { type: 'number', description: '產品 ID' },
             browseType: { type: 'string', description: '篩選類型', default: 'assigntome' },
+            moduleId: { type: 'number', description: '模塊 ID，限定 Bug 範圍至該模塊（父子模塊自動遞迴）。assigntome + moduleId 時走 byModule 並客戶端過濾指派人' },
             limit: { type: 'number', description: '返回數量限制', default: 20 }
+          },
+          required: ['productId']
+        }
+      },
+      {
+        name: 'getModules',
+        description: '獲取產品的模塊列表（Bug 分類）。模塊 ID 用於 browseBugs 的 moduleId 參數',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            productId: { type: 'number', description: '產品 ID' }
           },
           required: ['productId']
         }
@@ -117,6 +129,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'browseBugs': {
         const result = await zentaoAPI.browseBugs(args.productId, args);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }]
+        };
+      }
+
+      case 'getModules': {
+        const result = await zentaoAPI.getModules(args.productId);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }]
         };
