@@ -746,6 +746,62 @@ export class ZenTaoAPI {
   }
 
   /**
+   * 確認 Bug（confirmed 置為 1，但不標記為已解決）
+   * 適用「已提交代碼但尚未部署到測試服務器驗證」的情境。
+   * 使用舊版 API: /bug-confirm-{id}.json
+   *
+   * 可設欄位（全部可選，未提供時由禪道沿用現值）：
+   *   assignedTo - 確認後指派給（用戶帳號）
+   *   type       - Bug 類型（codeerror/config/install/security/performance/standard/automation/designdefect/others）
+   *   pri        - 優先級（整數）
+   *   comment    - 備註說明
+   *   mailto     - 抄送（帳號陣列）
+   *
+   * @param {number} bugId - Bug ID
+   * @param {Object} options - 確認選項
+   */
+  async confirmBug(bugId, options = {}) {
+    const { assignedTo = '', type = '', pri, comment = '', mailto = [] } = options;
+
+    const params = new URLSearchParams();
+    if (assignedTo) params.set('assignedTo', assignedTo);
+    if (type) params.set('type', type);
+    if (pri !== undefined && pri !== null) params.set('pri', String(pri));
+    if (comment) params.set('comment', comment);
+    if (Array.isArray(mailto) && mailto.length) params.set('mailto', mailto.join(','));
+
+    const data = await this.postOldApi(`bug-confirm-${bugId}.json`, params.toString());
+    return data;
+  }
+
+  /**
+   * 轉交 Bug（指派給另一人接手，不變更解決狀態）
+   * 適用「後端改完轉交前端接手」「需他人介入」等協作情境。
+   * 使用舊版 API: /bug-assignto-{id}.json（PHP 方法 assignTo 經路由轉小寫）
+   *
+   * @param {number} bugId - Bug ID
+   * @param {Object} options - 轉交選項
+   * @param {string} options.assignedTo - 轉交目標帳號（必填）
+   * @param {string} [options.comment] - 交接備註（建議說明對方需接手的工作）
+   * @param {string[]} [options.mailto] - 抄送帳號陣列
+   */
+  async assignBug(bugId, options = {}) {
+    const { assignedTo = '', comment = '', mailto = [] } = options;
+
+    if (!assignedTo) {
+      throw new Error('assignBug 需要 assignedTo（轉交目標帳號）');
+    }
+
+    const params = new URLSearchParams();
+    params.set('assignedTo', assignedTo);
+    if (comment) params.set('comment', comment);
+    if (Array.isArray(mailto) && mailto.length) params.set('mailto', mailto.join(','));
+
+    const data = await this.postOldApi(`bug-assignto-${bugId}.json`, params.toString());
+    return data;
+  }
+
+  /**
    * 抓取禪道檔案（圖片等），回傳 Buffer 及 MIME 類型（含自動重登）
    * @param {string} fileUrl - 完整 URL 或 file-read-{id}.{ext} 路徑
    * @returns {Promise<{buffer: Buffer, mimeType: string}>}

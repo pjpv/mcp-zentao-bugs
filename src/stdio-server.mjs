@@ -84,6 +84,36 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['bugId']
         }
+      },
+      {
+        name: 'confirmBug',
+        description: '確認 Bug（confirmed 置為 1，但不標記已解決）',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            bugId: { type: 'number', description: 'Bug ID' },
+            assignedTo: { type: 'string', description: '確認後指派給（用戶帳號）' },
+            type: { type: 'string', description: 'Bug 類型' },
+            pri: { type: 'number', description: '優先級' },
+            comment: { type: 'string', description: '備註說明' },
+            mailto: { type: 'array', items: { type: 'string' }, description: '抄送帳號陣列' }
+          },
+          required: ['bugId']
+        }
+      },
+      {
+        name: 'assignBug',
+        description: '轉交 Bug（指派給另一人接手，不變更解決狀態）',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            bugId: { type: 'number', description: 'Bug ID' },
+            assignedTo: { type: 'string', description: '轉交目標帳號' },
+            comment: { type: 'string', description: '交接備註' },
+            mailto: { type: 'array', items: { type: 'string' }, description: '抄送帳號陣列' }
+          },
+          required: ['bugId', 'assignedTo']
+        }
       }
     ]
   };
@@ -143,6 +173,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'markBugResolved': {
         const result = await zentaoAPI.markBugResolved(args.bugId, args);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }]
+        };
+      }
+
+      case 'confirmBug': {
+        const result = await zentaoAPI.confirmBug(args.bugId, args);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }]
+        };
+      }
+
+      case 'assignBug': {
+        const result = await zentaoAPI.assignBug(args.bugId, args);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }]
         };

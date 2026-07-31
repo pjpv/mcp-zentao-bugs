@@ -429,6 +429,105 @@ server.addTool({
 });
 
 server.addTool({
+  name: 'confirmBug',
+  description: [
+    '確認 Bug：將 confirmed 置為 1，但不標記為已解決。',
+    '適用「已提交代碼但尚未部署到測試服務器驗證」的情境；待部署驗證後再用 markBugResolved 標記已解決。',
+    '所有欄位可選，未提供時由禪道沿用現值。',
+    'type 可選值：codeerror / config / install / security / performance / standard / automation / designdefect / others',
+  ].join('\n'),
+  parameters: z.object({
+    bugId: z.number().describe('Bug ID（必需）'),
+    assignedTo: z.string().optional().describe('確認後指派給誰（用戶帳號），不填則沿用現值'),
+    type: z.enum([
+      'codeerror', 'config', 'install', 'security', 'performance',
+      'standard', 'automation', 'designdefect', 'others',
+    ]).optional().describe('Bug 類型'),
+    pri: z.number().optional().describe('優先級（整數）'),
+    comment: z.string().optional().describe('備註說明'),
+    mailto: z.array(z.string()).optional().describe('抄送帳號陣列'),
+  }),
+  annotations: { title: 'Confirm Bug', readOnlyHint: false, idempotentHint: false, openWorldHint: true },
+  execute: async (args, { log }) => {
+    return await new Promise((resolve) => {
+      enqueue(async () => {
+        try {
+          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必須為數字');
+          log.info(`正在確認 Bug #${args.bugId}...`);
+
+          const result = await zentaoAPI.confirmBug(args.bugId, {
+            assignedTo: args.assignedTo,
+            type: args.type,
+            pri: args.pri,
+            comment: args.comment,
+            mailto: args.mailto,
+          });
+          const summary = result.success
+            ? { success: true, message: `Bug #${args.bugId} 已成功確認` }
+            : { bug: result };
+          resolve({ content: [{ type: 'text', text: JSON.stringify(summary) }] });
+        } catch (err) {
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
+          });
+        }
+      });
+    });
+  },
+});
+
+server.addTool({
+  name: 'assignBug',
+  description: [
+    '轉交 Bug：將 Bug 指派給另一人接手，不變更解決狀態。',
+    '適用「後端改完轉交前端接手」「需他人介入」等協作情境。',
+    'assignedTo 必填（轉交目標帳號）。',
+  ].join('\n'),
+  parameters: z.object({
+    bugId: z.number().describe('Bug ID（必需）'),
+    assignedTo: z.string().describe('轉交目標帳號（必需，如 john）'),
+    comment: z.string().optional().describe('交接備註（建議說明對方需接手的工作）'),
+    mailto: z.array(z.string()).optional().describe('抄送帳號陣列'),
+  }),
+  annotations: { title: 'Assign Bug', readOnlyHint: false, idempotentHint: false, openWorldHint: true },
+  execute: async (args, { log }) => {
+    return await new Promise((resolve) => {
+      enqueue(async () => {
+        try {
+          if (!Number.isFinite(args.bugId)) throw new UserError('bugId 必須為數字');
+          if (!args.assignedTo) throw new UserError('assignedTo 為必填（轉交目標帳號）');
+          log.info(`正在轉交 Bug #${args.bugId} 給 ${args.assignedTo}...`);
+
+          const result = await zentaoAPI.assignBug(args.bugId, {
+            assignedTo: args.assignedTo,
+            comment: args.comment,
+            mailto: args.mailto,
+          });
+          const summary = result.success
+            ? { success: true, message: `Bug #${args.bugId} 已轉交給 ${args.assignedTo}` }
+            : { bug: result };
+          resolve({ content: [{ type: 'text', text: JSON.stringify(summary) }] });
+        } catch (err) {
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
+          });
+        }
+      });
+    });
+  },
+});
+
+server.addTool({
   name: 'getNextBug',
   description: '获取下一个需要处理的BUG（指派给我的激活BUG）。使用 for yield 生成器模式，高效找到第一个匹配的BUG后立即返回。这是开始工作时最常用的工具。必须指定产品ID以保持专注',
   parameters: z.object({

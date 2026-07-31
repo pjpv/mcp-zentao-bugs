@@ -230,6 +230,100 @@ describe('postOldApi with relogin', () => {
   });
 });
 
+describe('confirmBug', () => {
+  it('成功確認：POST bug-confirm-{id}.json，body 含正確欄位', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    const captured = {};
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      captured.url = url;
+      captured.body = opts.body;
+      return {
+        ok: true, status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+        text: async () => `<html><script>parent.location='/zentao/bug-view-77.html'</script></html>`
+      };
+    };
+
+    try {
+      const result = await api.confirmBug(77, {
+        assignedTo: 'john',
+        type: 'codeerror',
+        pri: 2,
+        comment: '已提交，待部署驗證',
+        mailto: ['alice', 'bob'],
+      });
+      assert.equal(result.success, true);
+      assert.match(captured.url, /bug-confirm-77\.json$/);
+      assert.match(captured.body, /assignedTo=john/);
+      assert.match(captured.body, /type=codeerror/);
+      assert.match(captured.body, /pri=2/);
+      assert.match(captured.body, /mailto=alice%2Cbob/); // 陣列以逗號串接
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('未提供選項時 body 為空字串', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    const captured = {};
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      captured.body = opts.body;
+      return {
+        ok: true, status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+        text: async () => `<html><script>parent.location='/zentao/bug-view-1.html'</script></html>`
+      };
+    };
+
+    try {
+      const result = await api.confirmBug(1);
+      assert.equal(result.success, true);
+      assert.equal(captured.body, '');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
+
+describe('assignBug', () => {
+  it('成功轉交：POST bug-assignto-{id}.json（注意小寫），body 含 assignedTo', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    const captured = {};
+
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url, opts) => {
+      captured.url = url;
+      captured.body = opts.body;
+      return {
+        ok: true, status: 200,
+        headers: { get: (k) => k === 'content-type' ? 'text/html' : null },
+        text: async () => `<html><script>parent.location='/zentao/bug-view-88.html'</script></html>`
+      };
+    };
+
+    try {
+      const result = await api.assignBug(88, {
+        assignedTo: 'frontdev',
+        comment: '後端已新增 API 欄位，請前端對接',
+      });
+      assert.equal(result.success, true);
+      assert.match(captured.url, /bug-assignto-88\.json$/); // 非 assignTo
+      assert.match(captured.body, /assignedTo=frontdev/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('缺少 assignedTo 時拋錯', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');
+    await assert.rejects(() => api.assignBug(5, {}), /assignedTo/);
+  });
+});
+
 describe('fetchFile with relogin', () => {
   it('正常圖片下載回傳 buffer + mimeType', async () => {
     const api = new ZenTaoAPI('http://zentao.test', 'user', 'pass');

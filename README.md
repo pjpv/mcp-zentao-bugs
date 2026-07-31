@@ -59,6 +59,7 @@ pnpm start
 - **圖片查看** — 自動解析 Bug 步驟中的圖片引用，透過 `getFileImage` 抓取私有伺服器上的截圖
 - **歷史記錄** — Bug 詳情包含操作日誌、備註、欄位變更等完整流轉記錄
 - **多種解決方案** — 支援 14 種解決方案（代碼錯誤、設計如此、無法重現、延期……）
+- **確認 / 轉交 Bug** — 支援「確認」（confirmed=1，不標記已解決）與「轉交」（指派給他人接手），適用 commit 後待部署驗證、後端改完轉交前端等協作情境
 - **SSE 流式傳輸** — 透過 Server-Sent Events 即時推送日誌和結果
 - **串行處理** — 單程序佇列處理，確保工具調用有序執行
 
@@ -73,6 +74,8 @@ pnpm start
 | `getBugDetail` | `bugId` | 取得 Bug 全欄位 + HTML 步驟 + 圖片 URL + 歷史記錄 |
 | `getBugStats` | `productId`, `browseType?` | 取得 Bug 統計（總數及前幾筆預覽） |
 | `markBugResolved` | `bugId`, `resolution?`, `comment?`, ... | 解決 Bug，支援多種解決方案及完整欄位 |
+| `confirmBug` | `bugId`, `comment?`, `assignedTo?`, `type?`, `pri?`, `mailto?` | 確認 Bug（confirmed=1，不標記已解決） |
+| `assignBug` | `bugId`, `assignedTo`, `comment?`, `mailto?` | 轉交 Bug（指派給他人接手，不變更解決狀態） |
 | `getFileImage` | `url` | 透過禪道 Session 抓取圖片，回傳 base64 |
 
 ### browseType 篩選類型
@@ -115,6 +118,22 @@ pnpm start
 | `notrepro` | 無法重現 |
 | `postponed` | 延期處理 |
 | `willnotfix` | 不予解決 |
+
+### type Bug 類型
+
+`confirmBug` 的 `type` 參數可選以下值（未提供時由禪道沿用現值）：
+
+| 值 | 含義 |
+|----|------|
+| `codeerror` | 代碼錯誤 |
+| `config` | 配置相關 |
+| `install` | 安裝相關 |
+| `security` | 安全相關 |
+| `performance` | 性能問題 |
+| `standard` | 標準規範 |
+| `automation` | 自動化 |
+| `designdefect` | 設計缺陷 |
+| `others` | 其他 |
 
 ## 圖片查看流程
 
