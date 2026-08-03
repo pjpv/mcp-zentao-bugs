@@ -298,7 +298,7 @@ export class ZenTaoAPI {
     const { keyword = '', allStatuses = false, limit = 10, assignedToMe = false } = options;
     const browseType = assignedToMe ? 'assigntome' : 'unclosed';
 
-    const bugs = await this.browseBugs(productId, { browseType, keyword, limit });
+    const { bugs } = await this.browseBugs(productId, { browseType, keyword, limit });
 
     if (!allStatuses) {
       return bugs.filter(b => String(b.status || '').toLowerCase() === 'active');
@@ -361,41 +361,60 @@ export class ZenTaoAPI {
    * 瀏覽 BUG 列表（直接使用伺服器端 browseType 篩選）
    * URL 格式：bug-browse-{productId}-{branch}-{browseType}-{param}-{orderBy}-{recTotal}-{recPerPage}-{pageID}.json
    *
+   * 永久精簡模式：僅返回 id/title/severity/status/assignedTo 五個欄位（不含 steps HTML），
+   * 避免 steps 的大量 HTML 超過 MCP 工具輸出上限被截斷（實測 20 條 steps 達 ~228KB ≫ ~50KB 上限）。
+   * 需看重現步驟請改用 getBugDetail(bugId)。
+   *
    * @param {number} productId - 產品 ID
    * @param {Object} options
    * @param {string} options.browseType - 篩選類型（assigntome / all / unclosed / openedbyme / resolvedbyme / toclosed / unresolved / unconfirmed / assigntonull / longlifebugs / postponedbugs / overduebugs / needconfirm）
    * @param {number} [options.moduleId] - 模塊 ID，限定 Bug 範圍至該模塊（父子模塊由 server 自動遞迴）。assigntome + moduleId 時改走 byModule 並客戶端過濾指派人
    * @param {string} [options.keyword] - 標題關鍵詞（客戶端過濾）
    * @param {number} [options.limit=20] - 回傳數量上限
-   * @returns {Promise<Array>}
+   * @param {number} [options.offset=0] - 跳過前 N 條（翻頁用；於 keyword/指派人過濾之後應用）
+   * @returns {Promise<{bugs: Array, total: number|null, hasMore: boolean}>}
+   *   - total: 伺服器回報的篩選總數；assigntome+moduleId 客戶端過濾情境為 null（server 無法同時篩選模塊與指派人）
+   *   - hasMore: 是否還有後續 bug；一般情境依精確 total 判斷，客戶端過濾情境依「是否拉到 server 盡頭」判斷
    */
   async browseBugs(productId, options = {}) {
-    const { browseType = 'assigntome', moduleId, keyword = '', limit = 20 } = options;
+    const { browseType = 'assigntome', moduleId, keyword = '', limit = 20, offset = 0 } = options;
     const strategy = this._resolveBrowseStrategy(browseType, moduleId);
+    const kw = keyword ? keyword.toLowerCase() : '';
+    // 任何客戶端過濾（指派人 / 關鍵詞）都會丟棄大量原始資料，需用 server 每頁上限 100 以減少翻頁
+    const hasClientFilter = strategy.needClientAssignedFilter || Boolean(kw);
 
     let allBugs = [];
     let page = 1;
-    // 客戶端過濾情境丟棄率高，取 server 每頁上限 100 以減少翻頁次數
-    const perPage = strategy.needClientAssignedFilter ? 100 : Math.min(limit, 100);
+    const perPage = hasClientFilter ? 100 : Math.min(limit + offset, 100);
     const maxPages = 50;
+    // 為湊齊 offset 之後的 limit 筆，需累積到 offset + limit
+    const target = offset + limit;
 
-    // 客戶端過濾情境（assigntome + moduleId）：需拉足量原始資料才能湊齊 limit 筆「指派給我」
-    // 一般情境：累積原始數量達 limit 即可停止
-    let myCount = 0; // 客戶端過濾情境下已收集的「指派給我」筆數（避免每輪重掃 allBugs）
+    // 統計已收集且「通過所有客戶端過濾」的筆數（循環停止依據）
+    // 增量計算避免每輪重掃 allBugs
+    let filteredCount = 0;
+    let total = null; // 伺服器回報的篩選總數（客戶端過濾情境為 null）
+    let reachedEnd = false; // 是否已拉到 server 盡頭（bugs.length < perPage）
     while (page <= maxPages) {
-      const collected = strategy.needClientAssignedFilter ? myCount : allBugs.length;
-      if (collected >= limit) break;
+      if (filteredCount >= target) break;
 
       const path = `bug-browse-${productId}-0-${strategy.serverBrowseType}-${strategy.serverParam}-id_desc-0-${perPage}-${page}.json`;
       const data = await this.fetchOldApi(path);
+      // 捕獲伺服器分頁總數（僅無客戶端過濾時可信）
+      if (total === null && data.pager?.recTotal != null) {
+        total = Number(data.pager.recTotal);
+      }
       const bugs = Array.isArray(data.bugs) ? data.bugs : [];
 
-      if (bugs.length === 0) break;
-      if (strategy.needClientAssignedFilter) {
-        myCount += bugs.filter(b => this._isAssignedToMe(b)).length;
+      if (bugs.length === 0) { reachedEnd = true; break; }
+      // 增量統計通過所有客戶端過濾的筆數
+      for (const b of bugs) {
+        if (strategy.needClientAssignedFilter && !this._isAssignedToMe(b)) continue;
+        if (kw && !String(b.title || '').toLowerCase().includes(kw)) continue;
+        filteredCount++;
       }
       allBugs = allBugs.concat(bugs);
-      if (bugs.length < perPage) break;
+      if (bugs.length < perPage) { reachedEnd = true; break; }
       page++;
     }
 
@@ -404,15 +423,41 @@ export class ZenTaoAPI {
       allBugs = allBugs.filter(b => this._isAssignedToMe(b));
     }
 
-    // 僅在有關鍵詞時做客戶端過濾
-    if (keyword) {
-      const kw = keyword.toLowerCase();
+    // 關鍵詞客戶端過濾
+    if (kw) {
       allBugs = allBugs.filter(b =>
         String(b.title || '').toLowerCase().includes(kw)
       );
     }
 
-    return allBugs.slice(0, limit);
+    // 任何客戶端過濾都使 server 的 total 不可信
+    if (hasClientFilter) {
+      total = null;
+    }
+
+    // offset 在所有客戶端過濾之後應用，確保跳頁語義正確
+    const paged = allBugs.slice(offset, offset + limit);
+
+    // 精簡為 5 欄位（與 browseBugsWithTotal / searchFirstActiveBugGenerator 一致）
+    const bugs = paged.map(b => ({
+      id: b.id,
+      title: b.title,
+      severity: b.severity,
+      status: b.status,
+      assignedTo: b.assignedTo
+    }));
+
+    // hasMore：
+    //   - total 可信（無客戶端過濾）：依精確 total
+    //   - total 不可信（客戶端過濾）：若未拉到 server 盡頭（reachedEnd=false）就可能有更多；
+    //     即使拉到盡頭，只要本地累積的已過濾全量還有 offset 之後未取的條目，也算還有更多。
+    //     （第二個條件確保 total=null 但數據剛好填滿本地緩衝時，仍能正確翻頁。）
+    const count = bugs.length;
+    const hasMore = total !== null
+      ? (offset + count < total)
+      : (!reachedEnd || (offset + count < allBugs.length));
+
+    return { bugs, total, hasMore };
   }
 
   /**

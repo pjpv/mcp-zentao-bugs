@@ -505,8 +505,9 @@ describe('browseBugs module 篩選', () => {
     try {
       const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 20 });
       assert.ok(capturedUrl.includes('-byModule-1090-'), '應走 byModule');
-      assert.equal(result.length, 2, '大小寫不一致仍應過濾出我的');
-      assert.deepEqual(result.map(b => b.id), [1, 3]);
+      assert.equal(result.bugs.length, 2, '大小寫不一致仍應過濾出我的');
+      assert.deepEqual(result.bugs.map(b => b.id), [1, 3]);
+      assert.equal(result.total, null, 'client-filter 情境 total 應為 null');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -523,7 +524,7 @@ describe('browseBugs module 篩選', () => {
     globalThis.fetch = async () => makeBugResponse(bugs);
     try {
       const result = await api.browseBugs(74, { browseType: 'unclosed', moduleId: 1090, limit: 20 });
-      assert.equal(result.length, 2, 'unclosed+moduleId 不應過濾指派人');
+      assert.equal(result.bugs.length, 2, 'unclosed+moduleId 不應過濾指派人');
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -680,8 +681,8 @@ describe('browseBugs client-filter 多頁收集', () => {
       assert.equal(capturedUrls.length, 2, '應翻 2 頁（第 1 頁不足 limit 需續翻）');
       assert.ok(capturedUrls[0].includes('-100-1.json'), '第 1 頁 perPage=100');
       assert.ok(capturedUrls[1].includes('-100-2.json'), '第 2 頁');
-      assert.equal(result.length, 3, '應湊齊 3 筆指派給我的');
-      assert.deepEqual(result.map(b => b.id), [1, 2, 3]);
+      assert.equal(result.bugs.length, 3, '應湊齊 3 筆指派給我的');
+      assert.deepEqual(result.bugs.map(b => b.id), [1, 2, 3]);
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -700,7 +701,65 @@ describe('browseBugs client-filter 多頁收集', () => {
     try {
       const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 2 });
       assert.equal(capturedUrls.length, 1, '第 1 頁即足量，不應翻第 2 頁');
-      assert.equal(result.length, 2);
+      assert.equal(result.bugs.length, 2);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  // Regression: filteredCount 恰好命中 target 時循環提前 break，
+  // hasMore 仍應為 true（server 上還有更多未拉的頁）。
+  // 此 bug 曾因 hasMore 只看本地 allBugs.length 而誤判為 false。
+  it('filteredCount 精確命中 target — hasMore 仍應為 true（server 還有更多）', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    // 第 1 頁 100 筆，恰好 20 筆 mine → filteredCount=20 命中 limit=20，循環 break
+    // 但 server 上還有第 2 頁（全 mine），故 hasMore 必須為 true
+    const page1 = Array.from({ length: 80 }, (_, i) => ({ id: 1000 + i, assignedTo: 'other', status: 'active', title: 'x' }))
+      .concat(Array.from({ length: 20 }, (_, i) => ({ id: 2000 + i, assignedTo: 'testuser', status: 'active', title: 'mine' })));
+    const page2 = Array.from({ length: 50 }, (_, i) => ({ id: 3000 + i, assignedTo: 'Testuser', status: 'active', title: 'mine2' }));
+    const capturedUrls = [];
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async (url) => {
+      capturedUrls.push(url);
+      return makeBugResponse(url.includes('-100-2.json') ? page2 : page1);
+    };
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 20 });
+      assert.equal(result.bugs.length, 20, '應返回 20 筆');
+      assert.equal(result.hasMore, true, '精確命中 target 仍 hasMore=true（server 第2頁還有）');
+      assert.equal(result.total, null, 'client-filter total 應為 null');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('已拉到 server 盡頭且有 offset 剩餘 — hasMore 應依本地未取量判斷', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    // server 僅 10 筆全 mine；limit=5 offset=3 → slice(3,8) 返回 5 條，但 allBugs 有 10 條
+    const page1 = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, assignedTo: 'testuser', status: 'active', title: 'm' }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => makeBugResponse(page1);
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 5, offset: 3 });
+      assert.equal(result.bugs.length, 5, 'slice(3,8) 返回 5 條');
+      assert.equal(result.hasMore, true, 'offset+count=8 < allBugs.length=10，hasMore=true');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('已拉到 server 盡頭且 offset 取完 — hasMore 應為 false', async () => {
+    const api = new ZenTaoAPI('http://zentao.test', 'testuser', 'pass');
+    api.login = mock.fn();
+    const page1 = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, assignedTo: 'testuser', status: 'active', title: 'm' }));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => makeBugResponse(page1);
+    try {
+      const result = await api.browseBugs(74, { browseType: 'assigntome', moduleId: 1090, limit: 5, offset: 5 });
+      assert.equal(result.bugs.length, 5, 'slice(5,10) 返回 5 條');
+      assert.equal(result.hasMore, false, 'offset+count=10 = allBugs.length，hasMore=false');
     } finally {
       globalThis.fetch = originalFetch;
     }

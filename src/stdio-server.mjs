@@ -49,14 +49,16 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: 'browseBugs',
-        description: '瀏覽 Bug 列表',
+        description: '瀏覽 Bug 列表（精簡模式，回傳 id/title/severity/status/assignedTo，不含 steps HTML）。需要 steps 請用 getBugDetail。hasMore=true 時可用 offset 翻頁。',
         inputSchema: {
           type: 'object',
           properties: {
             productId: { type: 'number', description: '產品 ID' },
             browseType: { type: 'string', description: '篩選類型', default: 'assigntome' },
             moduleId: { type: 'number', description: '模塊 ID，限定 Bug 範圍至該模塊（父子模塊自動遞迴）。assigntome + moduleId 時走 byModule 並客戶端過濾指派人' },
-            limit: { type: 'number', description: '返回數量限制', default: 20 }
+            keyword: { type: 'string', description: 'BUG 標題關鍵詞搜索（客戶端過濾）' },
+            limit: { type: 'number', description: '返回數量限制', default: 20 },
+            offset: { type: 'number', description: '跳過前 N 條，用於翻頁。hasMore=true 時下次傳 offset + 本次 count 取下一頁', default: 0 }
           },
           required: ['productId']
         }

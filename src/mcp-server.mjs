@@ -269,7 +269,13 @@ server.addTool({
 server.addTool({
   name: 'getMyBugs',
   description: [
-    '獲取 BUG 列表，支援多種伺服器端篩選條件。必須指定產品 ID。',
+    '獲取 BUG 列表（精簡模式），支援多種伺服器端篩選條件。必須指定產品 ID。',
+    '',
+    '返回精簡欄位：id / title / severity / status / assignedTo（不含 steps HTML）。',
+    '需要看重現步驟（steps）等完整內容時，對特定 Bug 調用 getBugDetail(bugId)。',
+    '',
+    '當 hasMore=true 時，下次調用傳 offset = 本次 offset + count 即可翻頁讀取後續 Bug。',
+    '',
     'browseType 可選值：',
     '  assigntome   - 指派給我（預設）',
     '  all          - 所有 Bug',
@@ -294,7 +300,8 @@ server.addTool({
     ]).optional().default('assigntome').describe('篩選類型，預設 assigntome（指派給我）'),
     moduleId: z.number().optional().describe('模塊 ID，限定 Bug 範圍至該模塊。父子模塊自動遞迴含子模塊。可用 getModules 查詢模塊 ID。⚠️ 與 browseType 的互動：assigntome + moduleId 改走 byModule 並客戶端過濾指派人（正確疊加）；但 openedbyme/resolvedbyme 等其他人員類型 + moduleId 時會只保留模塊範圍、丟失該人員篩選（禪道 server 限制），如需兩者請用 all+moduleId 自行過濾'),
     keyword: z.string().optional().describe('BUG 標題關鍵詞搜索（客戶端過濾）'),
-    limit: z.number().optional().default(20).describe('返回數量限制，預設 20 條')
+    limit: z.number().optional().default(20).describe('返回數量限制，預設 20 條'),
+    offset: z.number().optional().default(0).describe('跳過前 N 條，用於翻頁讀取後續 Bug。hasMore=true 時下次調用傳 offset + 本次 count 即可取下一頁')
   }),
   annotations: { title: 'Search Product Bugs', readOnlyHint: true, openWorldHint: true },
   execute: async (args, { log }) => {
@@ -303,11 +310,12 @@ server.addTool({
         try {
           log.info(`正在獲取 BUG 列表（${args.browseType}${args.moduleId ? `/moduleId=${args.moduleId}` : ''}）...`);
 
-          const bugs = await zentaoAPI.browseBugs(args.productId, {
+          const { bugs, total, hasMore } = await zentaoAPI.browseBugs(args.productId, {
             browseType: args.browseType,
             moduleId: args.moduleId,
             keyword: args.keyword,
-            limit: args.limit
+            limit: args.limit,
+            offset: args.offset
           });
 
           resolve({
@@ -316,6 +324,9 @@ server.addTool({
               text: JSON.stringify({
                 bugs,
                 count: bugs.length,
+                offset: args.offset,
+                hasMore,
+                total,
                 browseType: args.browseType,
                 productId: args.productId
               })
