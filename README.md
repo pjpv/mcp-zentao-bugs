@@ -71,7 +71,7 @@ pnpm start
 | `searchProducts` | `keyword?`, `limit?` | 搜索產品列表 |
 | `getModules` | `productId` | 取得產品的模塊列表（Bug 分類），用於查詢 `moduleId` |
 | `getMyBug` | `productName`, `keyword?` | 取得指定產品中指派給我的一個 Bug 詳情（透過產品名稱） |
-| `getMyBugs` | `productId`, `browseType?`, `moduleId?`, `keyword?`, `limit?` | 瀏覽 Bug 列表，支援伺服器端篩選與模塊限定 |
+| `getMyBugs` | `productId`, `browseType?`, `moduleId?`, `keyword?`, `limit?`, `offset?` | 瀏覽 Bug **精簡列表**（不含 steps HTML），支援篩選、模塊限定與翻頁 |
 | `getNextBug` | `productId`, `keyword?`, `moduleId?` | 以 generator 模式取得下一個待處理的激活 Bug |
 | `getBugDetail` | `bugId` | 取得 Bug 全欄位 + HTML 步驟 + 圖片 URL + 歷史記錄 |
 | `getBugStats` | `productId`, `browseType?`, `moduleId?` | 取得 Bug 統計（總數及前幾筆預覽） |
@@ -127,6 +127,38 @@ getNextBug({ productId: 74, moduleId: 1092 })
 > 若需同時篩選「模塊 + 特定人員類型」，請改用 `all` + `moduleId` 再自行過濾。
 >
 > **`getBugStats` 的已知行為**：`assigntome + moduleId` 時，回傳的 `total` 為第一頁過濾後筆數（非精確總數），`hasMore` 恆為 `true`（後續頁面可能仍有符合的 Bug）。
+
+### 列表 vs 詳情（getMyBugs / getBugDetail / getBugStats）
+
+`getMyBugs` 採**精簡模式**，僅回傳 `id / title / severity / status / assignedTo` 五個欄位，**不含 `steps` 等大段 HTML 內容**——這是為避免 steps 的 HTML 體積過大（實測 20 條可達 ~228KB）超過 MCP 工具輸出上限（~50KB）而被截斷。三個工具的分工：
+
+| 用途 | 工具 |
+|------|------|
+| 看列表 / 篩選 / 翻頁（精簡，無 steps） | `getMyBugs` |
+| 看單條 Bug 的完整內容（含 steps、圖片、歷史） | `getBugDetail(bugId)` |
+| 看總數統計 + 前 5 筆預覽 | `getBugStats` |
+
+#### 翻頁（offset）
+
+`getMyBugs` 支援 `offset` 參數，用於讀取後續頁。回傳結構含分頁資訊：
+
+```js
+getMyBugs({ productId: 74, limit: 20, offset: 0 })
+// → { bugs: [...20 條...], count: 20, offset: 0, hasMore: true, total: 53, ... }
+
+getMyBugs({ productId: 74, limit: 20, offset: 20 })  // 下一頁
+// → { bugs: [...20 條...], count: 20, offset: 20, hasMore: true, total: 53, ... }
+
+getMyBugs({ productId: 74, limit: 20, offset: 40 })  // 最後一頁
+// → { bugs: [...13 條...], count: 13, offset: 40, hasMore: false, total: 53 }
+```
+
+- `hasMore` 為 `true` 表示後面還有更多 Bug，下次調用傳 `offset + count` 取下一頁。
+- `total` 為伺服器回報的篩選總數（精確）；但以下情境 `total` 為 `null`（不可信），此時 `hasMore` 改依「已過濾全量是否還有未取」判斷：
+  - `assigntome + moduleId`（客戶端過濾指派人，server 無法同時篩選模塊與指派人）
+  - 使用 `keyword` 時（關鍵詞為客戶端過濾）
+
+> **⚠️ 客戶端過濾情境的翻頁穩定性**：`assigntome + moduleId` 或搭配 `keyword` 時，由於過濾在客戶端完成，若兩次調用間伺服器數據有變動（新增/解決了 Bug），過濾後的序列可能漂移，導致翻頁時跳過或重複少數 Bug。這是禪道 server 不支援「模塊 + 指派人」同時篩選所致的已知限制。
 
 ### resolution 解決方案
 
