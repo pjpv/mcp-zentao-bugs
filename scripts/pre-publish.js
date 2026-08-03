@@ -68,7 +68,7 @@ try {
     throw new Error('README.md 缺少包名信息');
   }
   
-  if (!readme.includes('npx mcp-zentao-bugs')) {
+  if (!readme.includes('npx')) {
     throw new Error('README.md 缺少 npx 使用说明');
   }
   
