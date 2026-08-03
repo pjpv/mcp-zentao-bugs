@@ -56,6 +56,7 @@ pnpm start
 
 - **Session 認證** — 使用禪道 12.x 舊版 Session API 登入，相容性更佳
 - **伺服器端篩選** — 透過 `browseType` 直接在伺服器端篩選 Bug（指派給我、未關閉、由我建立……）
+- **模塊篩選** — 透過 `moduleId` 限定 Bug 範圍至特定模塊（如 `/Web/Console`），父子模塊自動遞迴
 - **圖片查看** — 自動解析 Bug 步驟中的圖片引用，透過 `getFileImage` 抓取私有伺服器上的截圖
 - **歷史記錄** — Bug 詳情包含操作日誌、備註、欄位變更等完整流轉記錄
 - **多種解決方案** — 支援 14 種解決方案（代碼錯誤、設計如此、無法重現、延期……）
@@ -68,11 +69,12 @@ pnpm start
 | 工具名 | 主要參數 | 描述 |
 |--------|----------|------|
 | `searchProducts` | `keyword?`, `limit?` | 搜索產品列表 |
+| `getModules` | `productId` | 取得產品的模塊列表（Bug 分類），用於查詢 `moduleId` |
 | `getMyBug` | `productName`, `keyword?` | 取得指定產品中指派給我的一個 Bug 詳情（透過產品名稱） |
-| `getMyBugs` | `productId`, `browseType?`, `keyword?`, `limit?` | 瀏覽 Bug 列表，支援多種伺服器端篩選 |
-| `getNextBug` | `productId`, `keyword?` | 以 generator 模式取得下一個待處理的激活 Bug |
+| `getMyBugs` | `productId`, `browseType?`, `moduleId?`, `keyword?`, `limit?` | 瀏覽 Bug 列表，支援伺服器端篩選與模塊限定 |
+| `getNextBug` | `productId`, `keyword?`, `moduleId?` | 以 generator 模式取得下一個待處理的激活 Bug |
 | `getBugDetail` | `bugId` | 取得 Bug 全欄位 + HTML 步驟 + 圖片 URL + 歷史記錄 |
-| `getBugStats` | `productId`, `browseType?` | 取得 Bug 統計（總數及前幾筆預覽） |
+| `getBugStats` | `productId`, `browseType?`, `moduleId?` | 取得 Bug 統計（總數及前幾筆預覽） |
 | `markBugResolved` | `bugId`, `resolution?`, `comment?`, ... | 解決 Bug，支援多種解決方案及完整欄位 |
 | `confirmBug` | `bugId`, `comment?`, `assignedTo?`, `type?`, `pri?`, `mailto?` | 確認 Bug（confirmed=1，不標記已解決） |
 | `assignBug` | `bugId`, `assignedTo`, `comment?`, `mailto?` | 轉交 Bug（指派給他人接手，不變更解決狀態） |
@@ -97,6 +99,34 @@ pnpm start
 | `postponedbugs` | 被延期 |
 | `overduebugs` | 過期 Bug |
 | `needconfirm` | 需求變動 |
+
+### moduleId 模塊篩選
+
+`getMyBugs`、`getBugStats`、`getNextBug` 支援可選的 `moduleId` 參數，將 Bug 範圍限定至指定模塊（父子模塊由伺服器自動遞迴包含）。先用 `getModules` 查詢可用的模塊 ID：
+
+```
+getModules({ productId: 74 })
+// → [{ id: 1090, path: "/App", name: "App" }, { id: 1092, path: "/Web/Console", name: "Console" }, ...]
+```
+
+取得 `moduleId` 後即可限定查詢範圍：
+
+```
+getMyBugs({ productId: 74, moduleId: 1090 })
+getNextBug({ productId: 74, moduleId: 1092 })
+```
+
+> **⚠️ browseType 與 moduleId 的互動限制（禪道 server 限制）：**
+>
+> | browseType + moduleId | 行為 |
+> |-----------------------|------|
+> | `assigntome` + moduleId | ✅ 正確疊加：走 `byModule` 並客戶端過濾指派人 |
+> | `openedbyme`/`resolvedbyme` + moduleId | ⚠️ 只保留模塊範圍，**丟失人員篩選**（server 限制） |
+> | 其他類型 + moduleId | ✅ 依模塊範圍查詢 |
+>
+> 若需同時篩選「模塊 + 特定人員類型」，請改用 `all` + `moduleId` 再自行過濾。
+>
+> **`getBugStats` 的已知行為**：`assigntome + moduleId` 時，回傳的 `total` 為第一頁過濾後筆數（非精確總數），`hasMore` 恆為 `true`（後續頁面可能仍有符合的 Bug）。
 
 ### resolution 解決方案
 
@@ -179,6 +209,22 @@ markBugResolved({ bugId: 123, resolution: "fixedcodeerror", comment: "已修復"
 **5. 繼續下一個**
 ```
 getNextBug({ productId: 1 })
+```
+
+**6. 限定模塊範圍查看 Bug**
+```
+getModules({ productId: 74 })
+getMyBugs({ productId: 74, moduleId: 1090 })
+```
+
+**7. 確認 Bug（已提交代碼，待部署驗證）**
+```
+confirmBug({ bugId: 123, comment: "已提交，待部署驗證" })
+```
+
+**8. 轉交 Bug 給他人接手**
+```
+assignBug({ bugId: 123, assignedTo: "frontdev", comment: "後端 API 已就緒，請前端對接" })
 ```
 
 ## MCP 客戶端配置
