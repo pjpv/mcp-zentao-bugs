@@ -1,7 +1,7 @@
 {
-    "id": 170182,
-    "project": 1693,
-    "product": 862,
+    "id": 1,
+    "project": 1,
+    "product": 1,
     "injection": 0,
     "identify": 0,
     "branch": 0,
@@ -22,7 +22,7 @@
     "browser": "",
     "hardware": "",
     "found": "",
-    "steps": "<p>[步骤]</p>\n<p>编写测试。</p>\n<p><img onload=\"setImageSize(this,0)\" src=\"https://platform.onecode.cmict.cloud/zentao/file-read-315909.png\" alt=\"\" /></p>\n<p><br /></p>\n<p><br /></p>\n<p>[结果]</p>\n<br /><p>[期望]</p>\n<br />",
+    "steps": "<p>[步骤]</p>\n<p>编写测试。</p>\n<p><img onload=\"setImageSize(this,0)\" src=\"https://your-zentao.example.com/zentao/file-read-1.png\" alt=\"\" /></p>\n<p><br /></p>\n<p><br /></p>\n<p>[结果]</p>\n<br /><p>[期望]</p>\n<br />",
     "status": "resolved",
     "subStatus": "",
     "color": "",
@@ -33,10 +33,10 @@
     "notifyEmail": "",
     "mailto": [],
     "openedBy": {
-        "id": 6126,
-        "account": "niukunliang",
+        "id": 1,
+        "account": "demo-user",
         "avatar": "",
-        "realname": "牛昆亮"
+        "realname": "示例用户"
     },
     "openedDate": "2025-11-05T11:22:05Z",
     "openedBuild": [
@@ -46,18 +46,18 @@
         }
     ],
     "assignedTo": {
-        "id": 6126,
-        "account": "niukunliang",
+        "id": 1,
+        "account": "demo-user",
         "avatar": "",
-        "realname": "牛昆亮"
+        "realname": "示例用户"
     },
     "assignedDate": "2025-11-05T11:27:27Z",
     "deadline": null,
     "resolvedBy": {
-        "id": 6126,
-        "account": "niukunliang",
+        "id": 1,
+        "account": "demo-user",
         "avatar": "",
-        "realname": "牛昆亮"
+        "realname": "示例用户"
     },
     "personLiable": "",
     "resolution": "fixed",
@@ -81,10 +81,10 @@
     "issueKey": "",
     "testtask": 0,
     "lastEditedBy": {
-        "id": 6126,
-        "account": "niukunliang",
+        "id": 1,
+        "account": "demo-user",
         "avatar": "",
-        "realname": "牛昆亮"
+        "realname": "示例用户"
     },
     "lastEditedDate": "2025-11-05T11:27:27Z",
     "deleted": false,
@@ -97,22 +97,22 @@
     "latestStoryVersion": "",
     "taskName": "",
     "planName": "",
-    "projectName": "2025-IPMS",
+    "projectName": "示例项目",
     "linkMRTitles": [],
     "toCases": [],
     "files": [],
-    "productName": "2025-IPMS",
+    "productName": "示例产品",
     "productStatus": "normal",
     "moduleTitle": "/",
     "actions": [
         {
-            "id": 10920063,
+            "id": 1,
             "objectType": "bug",
-            "objectID": 170182,
-            "product": ",862,",
-            "project": 1693,
+            "objectID": 1,
+            "product": ",1,",
+            "project": 1,
             "execution": 0,
-            "actor": "牛昆亮",
+            "actor": "示例用户",
             "action": "opened",
             "date": "2025-11-05 19:22:06",
             "comment": "",
@@ -121,16 +121,16 @@
             "vision": "rnd",
             "efforted": 0,
             "history": [],
-            "desc": "2025-11-05 19:22:06, 由 <strong>牛昆亮</strong> 创建。\n"
+            "desc": "2025-11-05 19:22:06, 由 <strong>示例用户</strong> 创建。\n"
         },
         {
-            "id": 10920065,
+            "id": 2,
             "objectType": "bug",
-            "objectID": 170182,
-            "product": ",862,",
-            "project": 1693,
+            "objectID": 1,
+            "product": ",1,",
+            "project": 1,
             "execution": 0,
-            "actor": "牛昆亮",
+            "actor": "示例用户",
             "action": "edited",
             "date": "2025-11-05 19:24:35",
             "comment": "",
@@ -140,17 +140,17 @@
             "efforted": 0,
             "history": [
                 {
-                    "id": 2779872,
-                    "action": 10920065,
+                    "id": 1,
+                    "action": 2,
                     "field": "steps",
                     "old": "<p>[步骤]</p>\n编写测试。<br /><p>[结果]</p>\n<br /><p>[期望]</p>\n<br />",
-                    "new": "<p>[步骤]</p>\n<p>编写测试。</p>\n<p><img src=\"{315909.png}\" alt=\"\" /></p>\n<p><br /></p>\n<p><br /></p>\n<p>[结果]</p>\n<br /><p>[期望]</p>\n<br />",
-                    "diff": "002- <del>编写测试。<br /><p>[结果]</p></del>\n002+ <ins><p>编写测试。</p></ins>\n003- <del><br /><p>[期望]</p></del>\n003+ <ins><p><img src=\"{315909.png}\" alt=\"\" /></p></ins>\n004- <del><br /></del>\n004+ <ins><p><br /></p></ins>\n005+ <ins><p><br /></p></ins>\n006+ <ins><p>[结果]</p></ins>\n007+ <ins><br /><p>[期望]</p></ins>\n008+ <ins><br /></ins>",
+                    "new": "<p>[步骤]</p>\n<p>编写测试。</p>\n<p><img src=\"{1.png}\" alt=\"\" /></p>\n<p><br /></p>\n<p><br /></p>\n<p>[结果]</p>\n<br /><p>[期望]</p>\n<br />",
+                    "diff": "002- <del>编写测试。<br /><p>[结果]</p></del>\n002+ <ins><p>编写测试。</p></ins>\n003- <del><br /><p>[期望]</p></del>\n003+ <ins><p><img src=\"{1.png}\" alt=\"\" /></p></ins>\n004- <del><br /></del>\n004+ <ins><p><br /></p></ins>\n005+ <ins><p><br /></p></ins>\n006+ <ins><p>[结果]</p></ins>\n007+ <ins><br /><p>[期望]</p></ins>\n008+ <ins><br /></ins>",
                     "fieldName": "重现步骤"
                 },
                 {
-                    "id": 2779873,
-                    "action": 10920065,
+                    "id": 2,
+                    "action": 2,
                     "field": "linkBug",
                     "old": "0",
                     "new": "",
@@ -158,16 +158,16 @@
                     "fieldName": "相关Bug"
                 }
             ],
-            "desc": "2025-11-05 19:24:35, 由 <strong>牛昆亮</strong> 编辑。\n"
+            "desc": "2025-11-05 19:24:35, 由 <strong>示例用户</strong> 编辑。\n"
         },
         {
-            "id": 10920069,
+            "id": 3,
             "objectType": "bug",
-            "objectID": 170182,
-            "product": ",862,",
-            "project": 1693,
+            "objectID": 1,
+            "product": ",1,",
+            "project": 1,
             "execution": 0,
-            "actor": "牛昆亮",
+            "actor": "示例用户",
             "action": "resolved",
             "date": "2025-11-05 19:27:27",
             "comment": "已解决",
@@ -178,8 +178,8 @@
             "appendLink": "",
             "history": [
                 {
-                    "id": 2779876,
-                    "action": 10920069,
+                    "id": 3,
+                    "action": 3,
                     "field": "resolution",
                     "old": "",
                     "new": "fixed",
@@ -187,8 +187,8 @@
                     "fieldName": "解决方案"
                 },
                 {
-                    "id": 2779877,
-                    "action": 10920069,
+                    "id": 4,
+                    "action": 3,
                     "field": "status",
                     "old": "active",
                     "new": "resolved",
@@ -196,8 +196,8 @@
                     "fieldName": "Bug状态"
                 },
                 {
-                    "id": 2779878,
-                    "action": 10920069,
+                    "id": 5,
+                    "action": 3,
                     "field": "confirmed",
                     "old": "0",
                     "new": "1",
@@ -205,17 +205,17 @@
                     "fieldName": "是否确认"
                 },
                 {
-                    "id": 2779879,
-                    "action": 10920069,
+                    "id": 6,
+                    "action": 3,
                     "field": "resolvedBy",
                     "old": "",
-                    "new": "niukunliang",
+                    "new": "demo-user",
                     "diff": "",
                     "fieldName": "解决者"
                 },
                 {
-                    "id": 2779880,
-                    "action": 10920069,
+                    "id": 7,
+                    "action": 3,
                     "field": "resolvedDate",
                     "old": "",
                     "new": "2025-11-05 19:27:27",
@@ -223,7 +223,7 @@
                     "fieldName": "解决日期"
                 }
             ],
-            "desc": "2025-11-05 19:27:27, 由 <strong>牛昆亮</strong> 解决，方案为 <strong>已解决</strong> 。"
+            "desc": "2025-11-05 19:27:27, 由 <strong>示例用户</strong> 解决，方案为 <strong>已解决</strong> 。"
         }
     ],
     "preAndNext": {

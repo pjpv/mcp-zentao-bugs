@@ -1,53 +1,53 @@
 
-POST https://platform.onecode.cmict.cloud/zentao/api.php/v1/tokens
-Content-Type: 'application/json', 
- 
+POST https://your-zentao.example.com/zentao/api.php/v1/tokens
+Content-Type: 'application/json',
+
  {
-    "account": "user",
-    "password": "pwd"
+    "account": "your-account",
+    "password": "your-password"
 }
 
 ###
-GET https://platform.onecode.cmict.cloud/zentao/api.php/v1/products/862/bugs?page=2&limit=1
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api.php/v1/products/1/bugs?page=2&limit=1
+Content-Type: 'application/json',
+Token: your-token-here
 
 ###
 
-GET https://platform.onecode.cmict.cloud/zentao/api.php/v1/products/862/bugs?page=1&limit=10&status=openedbyme
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api.php/v1/products/1/bugs?page=1&limit=10&status=openedbyme
+Content-Type: 'application/json',
+Token: your-token-here
 ###
 
-GET https://platform.onecode.cmict.cloud/zentao/api.php/v1/products/862/bugs?page=1&limit=10&status=assigntome
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api.php/v1/products/1/bugs?page=1&limit=10&status=assigntome
+Content-Type: 'application/json',
+Token: your-token-here
 
 ###
-GET https://platform.onecode.cmict.cloud/zentao/api.php/v1/products/862/bugs?status=assigntome
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api.php/v1/products/1/bugs?status=assigntome
+Content-Type: 'application/json',
+Token: your-token-here
 
 
 
 
 ###
-GET https://platform.onecode.cmict.cloud/zentao/api-getsessionid.json
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api-getsessionid.json
+Content-Type: 'application/json',
+Token: your-token-here
 
 ###
-GET https://platform.onecode.cmict.cloud/zentao/user-login.json?account=niukunliang&password=Oa@@7152&zentaosid=b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/user-login.json?account=your-account&password=your-password&zentaosid=your-session-id
 
 ######
-GET https://platform.onecode.cmict.cloud/zentao/project-bug-862.json?zentaosid=b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/project-bug-1.json?zentaosid=your-session-id
 
 ###
-GET https://platform.onecode.cmict.cloud/zentao/index.php?m=company&f=browse&t=json&zentaosid=b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/index.php?m=company&f=browse&t=json&zentaosid=your-session-id
 
 ###
 
 
-GET https://platform.onecode.cmict.cloud/zentao/api.php/v1/products/862/bugs?page=2&limit=100
-Content-Type: 'application/json', 
-Token: b550c37ef42c650c4f9b15ef8374bd27
+GET https://your-zentao.example.com/zentao/api.php/v1/products/1/bugs?page=2&limit=100
+Content-Type: 'application/json',
+Token: your-token-here
