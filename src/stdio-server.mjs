@@ -116,6 +116,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ['bugId', 'assignedTo']
         }
+      },
+      {
+        name: 'editComment',
+        description: '編輯歷史備註（全量覆蓋 action 的 comment；禪道會刷新該操作的 date）。actionId 為 getBugDetail 回傳之 actions[].id（非 Bug ID）',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            actionId: { type: 'number', description: '操作歷史記錄 ID（actions[].id）' },
+            comment: { type: 'string', description: '新的備註完整內容（空字串可清空）' }
+          },
+          required: ['actionId', 'comment']
+        }
       }
     ]
   };
@@ -189,6 +201,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'assignBug': {
         const result = await zentaoAPI.assignBug(args.bugId, args);
+        return {
+          content: [{ type: 'text', text: JSON.stringify(result) }]
+        };
+      }
+
+      case 'editComment': {
+        const result = await zentaoAPI.editComment(args.actionId, args.comment);
         return {
           content: [{ type: 'text', text: JSON.stringify(result) }]
         };

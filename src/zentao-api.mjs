@@ -136,8 +136,11 @@ export class ZenTaoAPI {
 
   /**
    * 發送 POST 請求並解析舊版 API 回應（含自動重登）
+   * @param {string} path - API 路徑
+   * @param {string} body - URL encoded 請求體
+   * @param {Object} [extraHeaders] - 額外請求標頭（如 X-Requested-With，用於要求禪道回傳 JSON）
    */
-  async postOldApi(path, body) {
+  async postOldApi(path, body, extraHeaders = {}) {
     return this._requestWithRelogin(
       path,
       async () => {
@@ -145,7 +148,8 @@ export class ZenTaoAPI {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
-            'Cookie': `${this.sessionName}=${this.sessionId}`
+            'Cookie': `${this.sessionName}=${this.sessionId}`,
+            ...extraHeaders
           },
           body
         });
@@ -855,6 +859,47 @@ export class ZenTaoAPI {
 
     const data = await this.postOldApi(`bug-assignTo-${bugId}.json`, params.toString());
     return data;
+  }
+
+  /**
+   * 編輯歷史備註（全量覆蓋指定 action 的 comment 欄位）
+   * 使用舊版 API: /action-editComment-{actionId}.html
+   * （action 模組，表單欄位名為 lastComment，路由保留原方法名 editComment 駝峰，以網頁端實證為準）
+   *
+   * actionId 是 Bug 操作歷史記錄的 ID（getBugDetail 回傳之 actions[].id），非 Bug ID。
+   * 帶 X-Requested-With 標頭複製瀏覽器 ajax 條件，禪道據此回傳 JSON（{"result":"success",...}）
+   * 而非 HTML 重導頁。
+   * 注意：禪道服務端會同時把該 action 的 date 刷新為編輯時刻（實測 12.x，網頁端亦然），
+   * 依賴 date 判斷原始操作時間的調用方需知悉。
+   *
+   * @param {number} actionId - 操作歷史記錄 ID
+   * @param {string} comment - 新備註完整內容（直接取代原備註；空字串可清空）
+   * @returns {Promise<{success: true}>}
+   */
+  async editComment(actionId, comment) {
+    if (!Number.isInteger(actionId) || actionId <= 0) {
+      throw new Error('editComment 的 actionId 必須為正整數（getBugDetail 回傳之 actions[].id，非 Bug ID）');
+    }
+    if (typeof comment !== 'string') {
+      throw new Error('editComment 的 comment 必須為字串');
+    }
+
+    const params = new URLSearchParams();
+    params.set('lastComment', comment);
+
+    const data = await this.postOldApi(
+      `action-editComment-${actionId}.html`,
+      params.toString(),
+      { 'X-Requested-With': 'XMLHttpRequest' }
+    );
+
+    // 成功形態有兩種：新版 JSON（result=success）或舊版 HTML 重導（_parsePostResponse 解析為 success=true）
+    if (data?.result !== 'success' && data?.success !== true) {
+      const message = data?.message ?? data;
+      const detail = typeof message === 'string' ? message : JSON.stringify(message);
+      throw new Error(`編輯備註失敗（action ${actionId}）：${detail}`);
+    }
+    return { success: true };
   }
 
   /**

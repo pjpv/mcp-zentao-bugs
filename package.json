@@ -6,7 +6,9 @@
   "main": "src/mcp-server.mjs",
   "bin": {
     "mcp-zentao-bugs-v12": "src/mcp-server.mjs",
-    "zentao-mcp": "src/stdio-server.mjs"
+    "zentao-mcp": "src/stdio-server.mjs",
+    "zentao": "src/cli.mjs",
+    "zentao-bugs": "src/cli.mjs"
   },
   "scripts": {
     "start": "node -r dotenv/config src/mcp-server.mjs",

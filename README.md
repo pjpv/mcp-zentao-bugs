@@ -78,6 +78,7 @@ pnpm start
 | `markBugResolved` | `bugId`, `resolution?`, `comment?`, ... | 解決 Bug，支援多種解決方案及完整欄位 |
 | `confirmBug` | `bugId`, `comment?`, `assignedTo?`, `type?`, `pri?`, `mailto?` | 確認 Bug（confirmed=1，不標記已解決） |
 | `assignBug` | `bugId`, `assignedTo`, `comment?`, `mailto?` | 轉交 Bug（指派給他人接手，不變更解決狀態） |
+| `editComment` | `actionId`, `comment` | 編輯歷史備註（全量覆蓋；禪道會刷新該操作的 `date`）。`actionId` 為 `getBugDetail` 回傳之 `actions[].id`（非 Bug ID） |
 | `getFileImage` | `url` | 透過禪道 Session 抓取圖片，回傳 base64 |
 
 ### browseType 篩選類型
@@ -257,6 +258,12 @@ confirmBug({ bugId: 123, comment: "已提交，待部署驗證" })
 **8. 轉交 Bug 給他人接手**
 ```
 assignBug({ bugId: 123, assignedTo: "frontdev", comment: "後端 API 已就緒，請前端對接" })
+```
+
+**9. 補充 / 修正剛寫的備註（不追加新備註）**
+```
+getBugDetail({ bugId: 123 })   // 取 bug.actions 中最後一條含 comment 的 action，得其 id
+editComment({ actionId: 4567, comment: "【狀態】已確認（待部署驗證）\n【技術備註】Commit: a1b2c3d" })
 ```
 
 ## MCP 客戶端配置

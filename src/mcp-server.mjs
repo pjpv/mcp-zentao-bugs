@@ -539,6 +539,50 @@ server.addTool({
 });
 
 server.addTool({
+  name: 'editComment',
+  description: [
+    '編輯歷史備註：全量覆蓋指定操作記錄（action）的備註內容。',
+    '適用「修正／補充自己剛寫的備註」情境，避免追加新備註造成歷史破碎。',
+    'actionId 為操作歷史記錄 ID（非 Bug ID），從 getBugDetail 回傳的 bug.actions[].id 取得，',
+    '通常取最後一條含 comment 的 action。',
+    'comment 為完整新內容（直接取代原備註）；空字串可清空備註。',
+    '注意：禪道會把該操作的 date 刷新為編輯時刻（服務端行為，網頁端亦然）。',
+  ].join('\n'),
+  parameters: z.object({
+    actionId: z.number().int().describe('操作歷史記錄 ID（getBugDetail 回傳之 actions[].id，非 Bug ID）'),
+    comment: z.string().describe('新的備註完整內容（全量覆蓋原備註；空字串可清空）'),
+  }),
+  annotations: { title: 'Edit Comment', readOnlyHint: false, idempotentHint: true, openWorldHint: true },
+  execute: async (args, { log }) => {
+    return await new Promise((resolve) => {
+      enqueue(async () => {
+        try {
+          if (!Number.isFinite(args.actionId)) throw new UserError('actionId 必須為數字');
+          log.info(`正在編輯備註 action #${args.actionId}...`);
+
+          await zentaoAPI.editComment(args.actionId, args.comment);
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({ success: true, message: `備註 action #${args.actionId} 已更新` })
+            }]
+          });
+        } catch (err) {
+          resolve({
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                error: err instanceof UserError ? err.message : String(err?.message || err)
+              })
+            }]
+          });
+        }
+      });
+    });
+  },
+});
+
+server.addTool({
   name: 'getNextBug',
   description: '获取下一个需要处理的BUG（指派给我的激活BUG）。使用 for yield 生成器模式，高效找到第一个匹配的BUG后立即返回。这是开始工作时最常用的工具。必须指定产品ID以保持专注',
   parameters: z.object({

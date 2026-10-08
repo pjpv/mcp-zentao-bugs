@@ -4,6 +4,24 @@
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/)，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 
+## [0.3.0] - 2026-10-08
+
+### ✨ 新功能
+
+- **`editComment` 編輯歷史備註**：全量覆蓋指定操作記錄（action）的備註，適用「補充／修正自己剛寫的備註」情境，避免追加新備註。MCP 工具與 CLI（`zentao editComment <actionId> --comment ...`）皆可調用；`actionId` 為 `getBugDetail` 回傳之 `actions[].id`（非 Bug ID），CLI 未顯式提供備註值時拒絕執行以防誤清空（含 `--comment` 無值場景）。注意：禪道服務端會把該操作的 `date` 刷新為編輯時刻（網頁端亦然）
+- **CLI 長備註可靠性**：`confirmBug` / `markBugResolved` / `assignBug` 新增 `--comment-file <path>`（亦支援 `--commentFile`）
+- **stdin 備註**：`--comment -` 或 `--comment-file -` 可從 stdin 讀取完整備註
+- **寫入自檢**：上述命令成功時 stdout 附 `comment.length` / `comment.lines` / `comment.preview`，避免 Windows 多行參數被 shell 截斷卻不知情
+
+### 🐛 Bug 修復
+
+- **Windows / PowerShell 多行 `--comment` 截斷**：根因是 shell 傳參而非 API；改以檔案／stdin 作為可靠通道，並在 help / 全域 README / Cursor 規則標註
+
+### 📦 其他
+
+- 新增 CLI 入口 `zentao` / `zentao-bugs`（package.json bin），全域安裝即可用
+- 單元測試 36 → 57 項（新增 CLI 備註來源解析 12 項、editComment 契約與守衛 9 項等）
+
 ## [0.2.0] - 2026-08-04
 
 ### 🔴 破壞性變更（Breaking）
